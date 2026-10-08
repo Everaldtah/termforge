@@ -16,7 +16,7 @@ final class SimulatorBridgeTests: XCTestCase {
         let deadline = Date().addingTimeInterval(60)
         while case .idle = node.state, Date() < deadline { try await Task.sleep(nanoseconds: 50_000_000) }
         _ = try await node.waitUntilReady()
-        try XCTSkipUnless(linux.booted, "SimulatorLinuxTests boots the Linux layer first")
+        try await LinuxTestSupport.ensureBooted()
         node.execBackend = LinuxExecBackend(runtime: linux)
 
         let home = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
