@@ -73,6 +73,7 @@ EOF
 
   # fakefs import/export (needs libarchive headers) and TermForge's shim
   local cflags=(-arch arm64 -isysroot "$sdkpath" "$minflag" -O2 -std=gnu11 -DHAVE_CONFIG_H
+    -DTF_ISH_VERSION="\"ish $ISH_COMMIT\""
     -I"$SRC" -I"$bdir/meson" -I"$SRC/deps/libarchive/libarchive" -I"$SRC/deps" -Wall)
   clang "${cflags[@]}" -c "$SRC/tools/fakefs.c" -o "$bdir/fakefs.o"
   clang "${cflags[@]}" -I"$SHIM" -c "$SHIM/tf_ish.c" -o "$bdir/tf_ish.o"
