@@ -151,7 +151,9 @@ fork. `tools/ish/shim/tf_ish.c` is the only code that touches iSH's internals; i
 what iSH's own app does in `AppDelegate.m` / `TerminalViewController.m`:
 
 - `tf_ish_boot`: mount the fakefs root, `/proc`, `/dev/pts`, and the app's Documents
-  folder (realfs) at `/mnt/termforge`; start a tiny init that reaps orphans.
+  folder (realfs) at `/mnt/termforge`; drop any device nodes that came with the root
+  (their `rdev` is host-encoded; see LIMITATIONS.md) and let iSH create `/dev/*`; set a
+  fixed guest hostname; start a tiny init that reaps orphans.
 - `tf_ish_session_start`: a process on a new pseudo-terminal (`pty_open_fake` with a
   driver whose `write` is the host callback), `create_stdio`, `do_execve`, `task_start`.
 - `tf_ish_exec`: a process whose stdin/stdout/stderr are host pipes (`adhoc_fd_create`
@@ -168,7 +170,9 @@ The root filesystem is Alpine 3.20 x86 with the brief's package set, built by
 `.github/workflows/build-rootfs.yml` and published as release `rootfs-alpine-x86`. The
 app downloads it on first use, checks the SHA-256, and converts it with iSH's own
 `fakefs_import` (`Application Support/TermForge/roots/alpine-x86`). Alpine's `root`
-shell is bash; `/etc/profile.d/termforge.sh` starts shells in `/mnt/termforge`.
+shell is bash; `/etc/profile.d/termforge.sh` starts shells in `/mnt/termforge`; the image
+ships no `/dev` entries and `/etc/gitconfig` trusts every repository (`safe.directory = *`),
+because files on the host mount belong to the app's uid while the guest runs as root.
 
 ## child_process → Linux (phase 3)
 

@@ -33,7 +33,19 @@ macos-15 runner): Claude Code **reaches its first screen** ("Choose the text sty
 | linux.rootfs.download | 2319 ms | 107 MB from GitHub releases (runner network) |
 | linux.rootfs.import | 5834 ms | tar.gz → fakefs (iSH's `fakefs_import`, simulator disk) |
 | linux.boot | 201 ms | `tf_ish_boot`: mount root, /proc, /dev/pts, host mount, init |
-| linux.session | – | **process crashed** on the first pty session; under investigation |
+| linux.session | see below | (an earlier run crashed in `do_uname` on the simulator's long hostname; fixed in the shim) |
+
+Linux layer in the simulator after the hostname and device-node fixes (runs 37733216089
+and 37736288054):
+
+| metric | value | what it is |
+|---|---|---|
+| linux.boot | 91–117 ms | `tf_ish_boot` |
+| linux.session.bashPythonGitRg | 670–2497 ms | one pty session running bash + python3 + git + rg + cat, open to exit |
+| python3 `-c print` session | exit 0, output correct | per-tool sessions all return their output |
+| linux.exec.gitInitCommit | 57 ms | piped exec (`git` then refused the host-owned repo until `/etc/gitconfig` trusted it) |
+| uitest.linuxTabToPrompt | 3009 ms | new Linux tab → bash prompt (root already imported); `python3 -c 'print(6*7)'` → 42 |
+| linux.rootfs.download / import | 2.0–7.5 s / 2.9–5.8 s | 107 MB from GitHub releases; tar.gz → fakefs |
 
 The keystroke path above stops at the Swift side; it does not include SwiftTerm's
 render. No screen-latency measurement exists yet.
@@ -78,5 +90,4 @@ are lower bounds for the device.
 - Anything on a real iPhone or iPad.
 - SwiftTerm render latency, scrollback cost, 120 Hz behaviour.
 - Claude Code startup in the simulator with the ICU build of nodejs-mobile.
-- The Linux layer on iOS at all (simulator test exists; first run pending).
 - A prompt round trip through the API (needs credentials on the test device).
