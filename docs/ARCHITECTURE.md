@@ -143,11 +143,60 @@ Claude Code edit the same files.
   suspend/resume in memory. If iOS terminates the app, the tab list is restored on the
   next launch and Claude tabs resume their last conversation.
 
+## Linux layer (phase 2)
+
+`Packages/LinuxCore` wraps **iSH** (ish-app/ish @ 8334836, GPL-3.0 with LICENSE.IOS):
+an interpreted 32-bit x86 emulator plus a Linux syscall layer, all in C, no JIT, no
+fork. `tools/ish/shim/tf_ish.c` is the only code that touches iSH's internals; it does
+what iSH's own app does in `AppDelegate.m` / `TerminalViewController.m`:
+
+- `tf_ish_boot`: mount the fakefs root, `/proc`, `/dev/pts`, and the app's Documents
+  folder (realfs) at `/mnt/termforge`; start a tiny init that reaps orphans.
+- `tf_ish_session_start`: a process on a new pseudo-terminal (`pty_open_fake` with a
+  driver whose `write` is the host callback), `create_stdio`, `do_execve`, `task_start`.
+- `tf_ish_exec`: a process whose stdin/stdout/stderr are host pipes (`adhoc_fd_create`
+  over `realfs_fdops`), for child_process. Exit statuses are decoded from wait status.
+
+`tools/ish/build-ios.sh` cross-compiles iSH with meson (device + simulator; the vdso
+needs Homebrew LLVM + lld), iSH's vendored libarchive with its Xcode project, and the
+shim, then merges everything into `iSHCore.xcframework`
+(`.github/workflows/build-ish.yml`, release `ish-8334836`). The same shim is tested on
+Linux first (`tools/ish/test-linux.sh`), where iSH builds natively.
+
+The root filesystem is Alpine 3.20 x86 with the brief's package set, built by
+`scripts/build-rootfs.sh` (apk-tools-static, pinned versions, fixed mtimes) in
+`.github/workflows/build-rootfs.yml` and published as release `rootfs-alpine-x86`. The
+app downloads it on first use, checks the SHA-256, and converts it with iSH's own
+`fakefs_import` (`Application Support/TermForge/roots/alpine-x86`). Alpine's `root`
+shell is bash; `/etc/profile.d/termforge.sh` starts shells in `/mnt/termforge`.
+
+## child_process → Linux (phase 3)
+
+Once the Linux layer has booted, the app sets `NodeRuntime.execBackend` and Node is
+told `{event:"linux", available:true}`. Each session worker has a `LinuxTier`
+(`nodejs-project/lib/linux-tier.js`) after the host-url tier:
+
+1. The tier rewrites the request for the guest: absolute host paths under `$HOME`
+   become `/mnt/termforge/...`, `PATH`/`HOME`/`TMPDIR` are replaced by guest values.
+2. It posts `exec-start` to the supervisor over a dedicated `MessagePort`; the
+   supervisor allocates an exec channel (≥ `0x40000000`) and sends `REQUEST {op:"exec"}`
+   to Swift, which starts the program through `ExecBackend` (the app's
+   `LinuxExecBackend` → `LinuxRuntime.exec`).
+3. stdin flows as `EXEC_IN` frames (empty = EOF); stdout/stderr come back as `EXEC_OUT`
+   (first byte is the fd) and the exit as `EXEC_EXIT`. Kills go as `REQUEST {op:"exec-kill"}`,
+   applied after the start response if they arrive early.
+4. `spawnSync`/`execSync` block the worker on a `SharedArrayBuffer` until the supervisor
+   posts the collected result on the exec port (`receiveMessageOnPort`).
+
+The desktop test double (`nodejs-tests/host-client.js`) answers exec requests with real
+host processes, so `nodejs-tests/exec.test.js` covers the whole protocol without iOS.
+
 ## Tests
 
 | suite | runs on | what |
 |---|---|---|
 | `nodejs-tests/` (node:test) | Node 18.20.4 `--jitless`, CI ubuntu + local | frame codec, vtty line discipline, shim semantics vs real Node, installer (integrity, pax/GNU names, traversal), supervisor over TCP incl. two tabs with separate cwds |
 | `tools/desktop-harness` | same | boots the real supervisor, installs Claude Code from npm, renders it in a headless xterm, drives keys, reports timings |
-| `Tests/TermForgeTests` | iOS simulator (CI) | Swift frame codec parity with JS; the real nodejs-mobile runtime: pings, raw-mode TTY program, REPL, NOT_INSTALLED |
+| `tools/ish/test-linux.sh` | Linux (iSH built natively) | the C shim: boot, pty session, piped exec against the Alpine root |
+| `Tests/TermForgeTests` | iOS simulator (CI) | Swift frame codec parity with JS; the real nodejs-mobile runtime: pings, raw-mode TTY program, REPL, NOT_INSTALLED; Claude Code install + first screen; Linux root install, boot, bash/python3/git/rg, piped git init+commit |
 | `Tests/TermForgeUITests` | iOS simulator (CI) | REPL round trip, rotation, home/resume, on-device install + Claude Code first screen |

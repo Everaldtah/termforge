@@ -62,7 +62,8 @@ jobs:
       - name: Generate project
         run: |
           chmod +x scripts/*.sh
-          scripts/fetch-nodejs-mobile.sh
+          # UPSTREAM=1 until build-nodejs-mobile.yml has published the ICU build (then drop it)
+          UPSTREAM=1 scripts/fetch-nodejs-mobile.sh
           scripts/fetch-ish.sh
           xcodegen generate
       - name: Pick a simulator
@@ -88,7 +89,7 @@ jobs:
             -destination "platform=iOS Simulator,id=$SIM" \
             -resultBundlePath "$RUNNER_TEMP/TermForge.xcresult" \
             -skipPackagePluginValidation -skipMacroValidation \
-            2>&1 | tee "$RUNNER_TEMP/test.log" | grep -E --line-buffered '^(Test (Case|Suite)|METRIC|CLAUDE\||EXEC\||.*error:|\*\* TEST)' || true
+            2>&1 | tee "$RUNNER_TEMP/test.log" | grep -E --line-buffered '^(Test (Case|Suite)|METRIC|CLAUDE\||EXEC\||LINUX\||.*error:|\*\* TEST)' || true
           grep -q '\*\* TEST SUCCEEDED \*\*' "$RUNNER_TEMP/test.log"
       - name: Metrics
         if: always()
