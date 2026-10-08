@@ -1,2 +1,5 @@
 * text=auto eol=lf
 *.png binary
+
+.seeds/issues.jsonl merge=union
+.seeds/templates.jsonl merge=union
