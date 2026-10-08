@@ -22,7 +22,9 @@ jobs:
       - name: Tools
         run: brew install meson ninja
       - name: Build
-        run: tools/ish/build-ios.sh --out "$RUNNER_TEMP/ish"
+        run: |
+          chmod +x tools/ish/*.sh scripts/*.sh
+          tools/ish/build-ios.sh --out "$RUNNER_TEMP/ish"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
