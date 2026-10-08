@@ -1,0 +1,50 @@
+# Cross-compiles iSH (kernel, x86 emulator, fakefs, libarchive) plus TermForge's shim into
+# iSHCore.xcframework and publishes it as a release asset. Manual only (macOS minutes).
+name: Build iSHCore (iOS)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Xcode 26
+        run: |
+          X=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          [ -n "$X" ] || { ls /Applications | grep -i xcode; exit 1; }
+          sudo xcode-select -s "$X/Contents/Developer"; xcodebuild -version
+      - name: Tools
+        run: brew install meson ninja
+      - name: Build
+        run: tools/ish/build-ios.sh --out "$RUNNER_TEMP/ish"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ish-logs
+          path: |
+            ${{ runner.temp }}/ish/*/meson-setup.log
+            ${{ runner.temp }}/ish/*/ninja.log
+            ${{ runner.temp }}/ish/*/libarchive.log
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: iSHCore.xcframework
+          path: ${{ runner.temp }}/ish/iSHCore.xcframework.zip*
+      - name: Publish release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=ish-8334836
+          cd "$RUNNER_TEMP/ish"
+          NOTES="iSH 8334836 (GPL-3.0) + libarchive + TermForge shim for iOS 17 device/simulator. $(cat iSHCore.xcframework.zip.sha256)"
+          if gh release view "$TAG" -R "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release upload "$TAG" iSHCore.xcframework.zip iSHCore.xcframework.zip.sha256 --clobber -R "${{ github.repository }}"
+          else
+            gh release create "$TAG" iSHCore.xcframework.zip iSHCore.xcframework.zip.sha256 --title "$TAG" --notes "$NOTES" -R "${{ github.repository }}"
+          fi
