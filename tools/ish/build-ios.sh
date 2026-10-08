@@ -61,8 +61,10 @@ EOF
   fi
   ninja -C "$bdir/meson" libish.a libish_emu.a libfakefs.a > "$bdir/ninja.log" 2>&1 || { tail -40 "$bdir/ninja.log"; exit 1; }
 
-  # libarchive: iSH's own Xcode project for it (HAVE_CONFIG_H + deps/config.h)
-  xcodebuild -project "$SRC/deps/libarchive.xcodeproj" -target archive -configuration Release \
+  # libarchive: iSH's own Xcode project for it (HAVE_CONFIG_H + deps/config.h); its one target
+  local target; target="$(xcodebuild -list -project "$SRC/deps/libarchive.xcodeproj" 2>/dev/null | awk '/Targets:/{f=1;next} f&&NF{print $1; exit}')"
+  [ -n "$target" ] || { echo "no target in deps/libarchive.xcodeproj" >&2; exit 1; }
+  xcodebuild -project "$SRC/deps/libarchive.xcodeproj" -target "$target" -configuration Release \
     -sdk "$sdk" -arch arm64 ONLY_ACTIVE_ARCH=NO IPHONEOS_DEPLOYMENT_TARGET="$MIN_IOS" \
     SYMROOT="$bdir/libarchive" OBJROOT="$bdir/libarchive/obj" > "$bdir/libarchive.log" 2>&1 \
     || { grep -E "error:" "$bdir/libarchive.log" | head; exit 1; }
