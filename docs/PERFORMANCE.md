@@ -35,6 +35,12 @@ macos-15 runner): Claude Code **reaches its first screen** ("Choose the text sty
 | linux.boot | 201 ms | `tf_ish_boot`: mount root, /proc, /dev/pts, host mount, init |
 | linux.session | see below | (an earlier run crashed in `do_uname` on the simulator's long hostname; fixed in the shim) |
 
+First fully green run (37737720431, 2026-10-08): Claude Code `claude.openToFirstScreen`
+**1554 ms** (install 777 ms, entryLoaded 694 ms); UI test install-tap → Claude screen
+2283 ms; Linux boot 137 ms, bash+python3+git+rg session 975 ms, piped `git init`+commit
+106 ms, Linux tab → prompt 4025 ms; REPL open → prompt 84 ms; keystroke echo median
+0.43 ms. Simulator on an arm64 macOS runner; no device numbers yet.
+
 Linux layer in the simulator after the hostname and device-node fixes (runs 37733216089
 and 37736288054):
 

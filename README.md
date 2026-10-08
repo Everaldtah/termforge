@@ -4,14 +4,14 @@ A native iOS terminal that runs **Claude Code inside the app**. No SSH and no re
 machine. Node.js (nodejs-mobile, V8 without JIT) runs in-process, and every tab is a
 worker thread behind a virtual TTY rendered by SwiftTerm.
 
-> Status: **phases 1–3 built, iOS verification in progress.** Node runtime, tabs, TTY,
-> REPL, rotation and suspend/resume pass in the iOS simulator. Claude Code installs there;
-> loading it needs the ICU rebuild of nodejs-mobile (`build-nodejs-mobile.yml`, device
-> build done, simulator pending). The Linux layer (iSH + Alpine x86 root) and the
-> child_process bridge are verified on Linux and are going through their first simulator
-> run. Phase 4 and the FastPath engine are not started. Read
-> [docs/LIMITATIONS.md](docs/LIMITATIONS.md) first: Claude Code is pinned to 2.1.112, the
-> last release published as JavaScript, Anthropic's hosting terms apply, and TermForge is
+> Status: **phases 1–3 pass in the iOS simulator** (CI run 37737720431): Claude Code
+> 2.1.112 renders in a tab in 1.6 s on the ICU build of nodejs-mobile; the Alpine x86 root
+> boots in iSH in ~140 ms with Documents at `/mnt/termforge`; bash, python3, git and
+> ripgrep run there; the child_process bridge is verified against real processes and
+> LinuxCore's piped exec runs `git init`+commit in the shared folder. Not yet done: a real
+> device (TestFlight), phase 4 (distro manager, Files provider, settings), the FastPath
+> engine. Read [docs/LIMITATIONS.md](docs/LIMITATIONS.md): Claude Code is pinned to
+> 2.1.112 (the last JavaScript release), Anthropic's hosting terms apply, and TermForge is
 > GPL-3.0 because it embeds iSH.
 
 ## Build (needs a Mac with Xcode 26)
