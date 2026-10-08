@@ -69,8 +69,10 @@ class LinuxTier {
   _spec(spec) {
     const file = toGuestPath(spec.file, this.hostHome);
     const args = spec.args.map((a) => toGuestPath(String(a), this.hostHome));
+    // execve does no PATH search (libuv's execvp does): let the guest shell resolve bare names
+    const argv = file.includes('/') ? [file, ...args] : ['/bin/sh', '-c', 'exec "$0" "$@"', file, ...args];
     return {
-      argv: [file, ...args],
+      argv,
       cwd: toGuestPath(spec.cwd, this.hostHome) || GUEST_HOME,
       env: guestEnv(spec.env, this.hostHome),
     };

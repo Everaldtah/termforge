@@ -97,7 +97,11 @@ class Host extends EventEmitter {
     const respond = (ok, body) => this.sock.write(encode(T.RESPONSE, 0, { id: req.id, ok, ...(ok ? { result: body } : { error: body }) }));
     if (req.op === 'exec') {
       this.execLog.push(req);
-      const [file, ...args] = req.argv;
+      let [file, ...args] = req.argv;
+      // the tier wraps bare names in `/bin/sh -c 'exec "$0" "$@"' name args`; spawn the
+      // program directly here (what the guest shell would do), which also keeps kill
+      // semantics sane on Windows where a killed sh leaves its child running
+      if (file === '/bin/sh' && args[0] === '-c' && args[1] === 'exec "$0" "$@"') [file, ...args] = args.slice(2);
       const program = file.startsWith('/') ? path.posix.basename(file) : file;
       const cwd = toHostPath(req.cwd, this.hostHome);
       const env = { ...process.env, ...req.env, HOME: this.hostHome, PATH: process.env.PATH };

@@ -48,6 +48,7 @@ test('exec protocol: child_process runs on the host through the Linux tier', asy
   // every exec reached the host with guest paths and a guest environment
   assert.ok(host.execLog.length >= 6);
   for (const req of host.execLog) {
+    assert.ok(req.argv[0].startsWith('/'), `bare names go through /bin/sh: ${req.argv.join(' ')}`);
     assert.ok(req.cwd.startsWith(GUEST_HOME), req.cwd);
     assert.strictEqual(req.env.HOME, GUEST_HOME);
     assert.ok(req.env.PATH.startsWith('/usr/local'));
