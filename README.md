@@ -7,8 +7,8 @@ worker thread behind a virtual TTY rendered by SwiftTerm.
 > Status: **phases 1–3 pass in the iOS simulator** (CI run 37737720431): Claude Code
 > 2.1.112 renders in a tab in 1.6 s on the ICU build of nodejs-mobile; the Alpine x86 root
 > boots in iSH in ~140 ms with Documents at `/mnt/termforge`; bash, python3, git and
-> ripgrep run there; the child_process bridge is verified against real processes and
-> LinuxCore's piped exec runs `git init`+commit in the shared folder. Not yet done: a real
+> ripgrep run there; a Node session's `child_process` calls run `git init && git commit`
+> and `rg` inside the Linux layer, in the shared folder (the acceptance path, run 37742367010). Not yet done: a real
 > device (TestFlight), phase 4 (distro manager, Files provider, settings), the FastPath
 > engine. Read [docs/LIMITATIONS.md](docs/LIMITATIONS.md): Claude Code is pinned to
 > 2.1.112 (the last JavaScript release), Anthropic's hosting terms apply, and TermForge is

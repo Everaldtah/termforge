@@ -50,6 +50,7 @@ and 37736288054):
 | linux.session.bashPythonGitRg | 670–2497 ms | one pty session running bash + python3 + git + rg + cat, open to exit |
 | python3 `-c print` session | exit 0, output correct | per-tool sessions all return their output |
 | linux.exec.gitInitCommit | 57 ms | piped exec (`git` then refused the host-owned repo until `/etc/gitconfig` trusted it) |
+| bridge.nodeGitInitCommitViaLinux | 363–1781 ms | a Node script's child_process calls (uname, git init/add/commit/log, rg) through the tier, the supervisor, ExecBackend and iSH, writing into Documents (run 37742367010) |
 | uitest.linuxTabToPrompt | 3009 ms | new Linux tab → bash prompt (root already imported); `python3 -c 'print(6*7)'` → 42 |
 | linux.rootfs.download / import | 2.0–7.5 s / 2.9–5.8 s | 107 MB from GitHub releases; tar.gz → fakefs |
 
