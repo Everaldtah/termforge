@@ -1,0 +1,113 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node:
+    name: Node runtime (Node 18.20.4, jitless)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18.20.4
+      - name: Unit + integration tests
+        run: node --test nodejs-tests/
+      - name: Claude Code first screen under jitless Node 18 (Linux stand-in for iOS)
+        working-directory: tools/desktop-harness
+        run: |
+          npm ci --no-audit --no-fund
+          node run-session.mjs --home "$RUNNER_TEMP/home" --install claude-code --kind claude \
+            --wait-ms 60000 --steps-file .steps-first-screen.json --report "$RUNNER_TEMP/claude-linux.json"
+      - name: Vendoring report
+        run: node scripts/vendor-claude-code.mjs --out "$RUNNER_TEMP/vendor" --probe-report "$RUNNER_TEMP/claude-linux.json" > "$RUNNER_TEMP/vendor-report.md"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: node-reports
+          path: |
+            ${{ runner.temp }}/claude-linux.json
+            ${{ runner.temp }}/vendor-report.md
+          if-no-files-found: ignore
+
+  ios:
+    name: iOS build + tests (simulator)
+    runs-on: macos-15
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - name: Xcode 26
+        run: |
+          X=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$X" ]; then echo "no Xcode 26 on this image"; ls /Applications | grep -i xcode; exit 1; fi
+          sudo xcode-select -s "$X/Contents/Developer"
+          xcodebuild -version
+      - name: Tools
+        run: brew install xcodegen
+      - name: Cache nodejs-mobile
+        uses: actions/cache@v4
+        with:
+          path: Packages/NodeCore/Vendor
+          key: nodejs-mobile-${{ hashFiles('scripts/fetch-nodejs-mobile.sh') }}
+      - name: Generate project
+        run: |
+          scripts/fetch-nodejs-mobile.sh
+          xcodegen generate
+      - name: Pick a simulator
+        run: |
+          UDID=$(xcrun simctl list devices available --json | python3 -c '
+          import json, sys
+          data = json.load(sys.stdin)["devices"]
+          best = None
+          for runtime, devs in data.items():
+              if "iOS" not in runtime:
+                  continue
+              ver = tuple(int(x) for x in runtime.rsplit("iOS-", 1)[-1].split("-"))
+              for d in devs:
+                  if d["name"].startswith("iPhone") and (best is None or ver > best[0]):
+                      best = (ver, d["udid"], d["name"])
+          print(best[1]); print(best[2], best[0], file=sys.stderr)
+          ')
+          echo "SIM=$UDID" >> "$GITHUB_ENV"
+      - name: Test (unit + UI)
+        run: |
+          set -o pipefail
+          xcodebuild test -project TermForge.xcodeproj -scheme TermForge \
+            -destination "platform=iOS Simulator,id=$SIM" \
+            -resultBundlePath "$RUNNER_TEMP/TermForge.xcresult" \
+            -skipPackagePluginValidation -skipMacroValidation \
+            2>&1 | tee "$RUNNER_TEMP/test.log" | grep -E --line-buffered '^(Test (Case|Suite)|METRIC|.*error:|\*\* TEST)' || true
+          grep -q '\*\* TEST SUCCEEDED \*\*' "$RUNNER_TEMP/test.log"
+      - name: Metrics
+        if: always()
+        run: |
+          { echo "### Simulator metrics (CI runner, not a device)"; echo '```'; grep '^METRIC' "$RUNNER_TEMP/test.log" || echo "none"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Device build (App Store config, unsigned) + compliance check
+        run: |
+          set -o pipefail
+          xcodebuild build -project TermForge.xcodeproj -scheme TermForge -configuration Release \
+            -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/dd" \
+            -skipPackagePluginValidation -skipMacroValidation CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee "$RUNNER_TEMP/device.log" | grep -E --line-buffered '(error:|\*\* BUILD)' || true
+          grep -q '\*\* BUILD SUCCEEDED \*\*' "$RUNNER_TEMP/device.log"
+          APP=$(find "$RUNNER_TEMP/dd/Build/Products/Release-iphoneos" -maxdepth 1 -name 'TermForge.app' | head -1)
+          scripts/check-appstore-compliance.sh "$APP" | tee "$RUNNER_TEMP/compliance.txt"
+          { echo "### App Store static checks"; echo '```'; cat "$RUNNER_TEMP/compliance.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-results
+          path: |
+            ${{ runner.temp }}/TermForge.xcresult
+            ${{ runner.temp }}/test.log
+            ${{ runner.temp }}/device.log
+            ${{ runner.temp }}/compliance.txt
+          if-no-files-found: ignore
