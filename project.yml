@@ -79,7 +79,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.everaldtah.termforge
         TARGETED_DEVICE_FAMILY: "1,2"
-        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 
   TermForgeTests:
     type: bundle.unit-test
