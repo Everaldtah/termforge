@@ -7,7 +7,7 @@ set -euo pipefail
 TAG="ish-8334836"
 NAME="iSHCore.xcframework.zip"
 URL="https://github.com/Everaldtah/termforge/releases/download/${TAG}/${NAME}"
-SHA256="b5cf10d7637cf8e9caf3974e9a4f036e5ca3b6958d6c54b718374e2be2b3cda6"
+SHA256="400dd7b4044e87cbc7fd4f39750e539e271caf3b1940e237f79348aba7d7c42d"
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DEST="$ROOT/Packages/LinuxCore/Vendor"
