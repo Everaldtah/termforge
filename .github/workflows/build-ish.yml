@@ -19,8 +19,8 @@ jobs:
           X=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
           [ -n "$X" ] || { ls /Applications | grep -i xcode; exit 1; }
           sudo xcode-select -s "$X/Contents/Developer"; xcodebuild -version
-      - name: Tools
-        run: brew install meson ninja
+      - name: Tools (iSH's vdso build needs Homebrew LLVM for clang -target i386-linux + lld)
+        run: brew install meson ninja llvm
       - name: Build
         run: |
           chmod +x tools/ish/*.sh scripts/*.sh
