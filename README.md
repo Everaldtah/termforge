@@ -8,11 +8,15 @@ worker thread behind a virtual TTY rendered by SwiftTerm.
 > 2.1.112 renders in a tab in 1.6 s on the ICU build of nodejs-mobile; the Alpine x86 root
 > boots in iSH in ~140 ms with Documents at `/mnt/termforge`; bash, python3, git and
 > ripgrep run there; a Node session's `child_process` calls run `git init && git commit`
-> and `rg` inside the Linux layer, in the shared folder (the acceptance path, run 37742367010). Not yet done: a real
-> device (TestFlight), phase 4 (distro manager, Files provider, settings), the FastPath
-> engine. Read [docs/LIMITATIONS.md](docs/LIMITATIONS.md): Claude Code is pinned to
-> 2.1.112 (the last JavaScript release), Anthropic's hosting terms apply, and TermForge is
-> GPL-3.0 because it embeds iSH.
+> and `rg` inside the Linux layer, in the shared folder (the acceptance path, run 37742367010).
+> On a real iPhone via TestFlight: Claude Code signs in and answers prompts (build 5).
+> Because the API refuses the newest models to Claude Code 2.1.112, an **Agent tab** —
+> TermForge's own Messages API chat with file tools and `bash` in the Linux layer, on the
+> user's API key — gives access to Claude Opus 5.5, Fable 5.1 and the rest. Not yet done:
+> phase 4 (distro manager, Files provider), the FastPath engine. Read
+> [docs/LIMITATIONS.md](docs/LIMITATIONS.md): Claude Code is pinned to 2.1.112 (the last
+> JavaScript release), Anthropic's hosting terms apply, and TermForge is GPL-3.0 because it
+> embeds iSH.
 
 ## Build (needs a Mac with Xcode 26)
 
@@ -44,6 +48,7 @@ node run-session.mjs --home /tmp/tf-home --install claude-code --kind claude --u
 | `Packages/LinuxCore` | iSH wrapper: boot, pty sessions, piped exec (`iSHCore.xcframework` from `build-ish.yml`) |
 | `tools/ish/` | the C shim over iSH's kernel, its Linux test harness, the iOS cross-build script |
 | `nodejs-project/` | runs inside Node: supervisor, virtual TTY, child_process shim, installer, pins |
+| `nodejs-project/agent/` | the Agent tab: TermForge's own Messages API chat with file tools and `bash` in the Linux layer (API key; Opus 5.5, Fable 5.1, …) |
 | `nodejs-tests/`, `Tests/` | Node tests, iOS unit + UI tests |
 | `tools/desktop-harness` | desktop stand-in for the app: boots the supervisor, renders a tab in a headless xterm |
 | `scripts/` | bootstrap, framework fetches, Alpine rootfs builder, Claude Code vendoring report, App Store checks |

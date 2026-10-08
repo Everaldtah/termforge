@@ -96,6 +96,21 @@ From code.claude.com/docs/en/legal-and-compliance, 2026-10-08:
   The paste-the-code flow that Claude Code prints is the fallback, and it needs no
   redirect.
 
+## Latest models: not in Claude Code tabs, yes in the Agent tab (measured)
+
+- Claude Code 2.1.112 lists the models it shipped with (Opus 4.7 era). The API checks the
+  client version per model: `claude-opus-5-5` needs Claude Code ≥ 2.1.280 and
+  `claude-fable-5-1` ≥ 2.1.251 (`claude_code_version_too_old`), so a Claude Code tab can
+  use Sonnet 5.5 / Haiku 5.5 but not those two. Newer Claude Code releases are native
+  binaries for Node ≥ 22, which nodejs-mobile cannot run.
+- TermForge does not spoof the client version or patch Claude Code (Anthropic's hosting
+  terms). The Agent tab uses the Messages API directly instead, with the user's own API
+  key, so it is billed to API credits rather than a Claude subscription, and it is not
+  Claude Code: a smaller tool set (files + bash in the Linux layer), no MCP, no hooks, no
+  slash-command ecosystem, no session resume yet.
+- Prices shown by `/cost` are estimates from the usage block and a fixed price table;
+  the API's invoice is the truth.
+
 ## iOS process model
 
 - iOS suspends TermForge in the background. Running prompts pause, and an HTTP stream

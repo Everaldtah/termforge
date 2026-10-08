@@ -47,6 +47,7 @@ final class TerminalSession: ObservableObject, Identifiable {
         self.controller = TerminalController()
         switch kind {
         case .node(.claude): title = "Claude · \(project.lastPathComponent)"
+        case .node(.agent): title = "Agent · \(project.lastPathComponent)"
         case .node(.repl): title = "Node"
         case .node(.script): title = "Script"
         case .linux: title = "Alpine"
@@ -73,6 +74,17 @@ final class TerminalSession: ObservableObject, Identifiable {
         if sessionKind == .claude {
             if let apiKey, !apiKey.isEmpty { env["ANTHROPIC_API_KEY"] = apiKey }
             if resumeOnStart && Paths.hasClaudeConversation(cwd: project) { argv = ["--continue"] }
+        }
+        if sessionKind == .agent {
+            // the agent has no sign-in of its own: without a key the tab shows the key card instead
+            guard let apiKey, !apiKey.isEmpty else {
+                resumeOnStart = false
+                finished(SessionExit(code: nil, error: "no API key", reason: "NOT_INSTALLED", ms: nil))
+                return
+            }
+            env["ANTHROPIC_API_KEY"] = apiKey
+            env["TERMFORGE_AGENT_MODEL"] = AgentSettings.model
+            env["TERMFORGE_AGENT_EFFORT"] = AgentSettings.effort
         }
         resumeOnStart = false
         let spec = SessionSpec(kind: sessionKind, cols: controller.cols, rows: controller.rows, cwd: project.path, env: env,

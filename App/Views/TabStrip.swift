@@ -4,6 +4,7 @@ import SwiftUI
 struct TabStrip: View {
     @EnvironmentObject private var model: AppModel
     @State private var showProjects = false
+    @State private var showAgentProjects = false
 
     var body: some View {
         HStack(spacing: 6) {
@@ -23,6 +24,12 @@ struct TabStrip: View {
                     Label("Claude Code…", systemImage: "sparkles")
                 }
                 .accessibilityIdentifier("new.claude")
+                Button {
+                    showAgentProjects = true
+                } label: {
+                    Label("Agent (API key)…", systemImage: "brain")
+                }
+                .accessibilityIdentifier("new.agent")
                 Button {
                     model.newSession(kind: .linux)
                 } label: {
@@ -53,6 +60,12 @@ struct TabStrip: View {
             ProjectPicker { project in
                 showProjects = false
                 model.newSession(kind: .node(.claude), project: project)
+            }
+        }
+        .sheet(isPresented: $showAgentProjects) {
+            ProjectPicker(title: "Open the agent in…") { project in
+                showAgentProjects = false
+                model.newSession(kind: .node(.agent), project: project)
             }
         }
     }
@@ -89,6 +102,7 @@ struct TabChip: View {
 
 /// Folders under ~/Projects (Documents/Projects in the Files app).
 struct ProjectPicker: View {
+    var title = "Open Claude Code in…"
     let onPick: (URL) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var folders = Paths.projectFolders()
@@ -112,7 +126,7 @@ struct ProjectPicker: View {
                     }
                 }
             }
-            .navigationTitle("Open Claude Code in…")
+            .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }

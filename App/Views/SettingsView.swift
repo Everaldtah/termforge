@@ -96,9 +96,43 @@ struct LinuxInstallControls: View {
     }
 }
 
+/// Shown in an Agent tab until an API key is saved.
+struct APIKeyCard: View {
+    @EnvironmentObject private var model: AppModel
+    @State private var apiKey = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Add an Anthropic API key").font(.headline)
+            Text("The Agent tab talks to the Messages API directly with your own key (console.anthropic.com → API keys), so it can use Claude Opus 5.5, Fable 5.1 and the other current models. Usage is billed to that API account, not to a Claude subscription. The key is kept in this device's Keychain.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            SecureField("sk-ant-…", text: $apiKey)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .textFieldStyle(.roundedBorder)
+                .accessibilityIdentifier("agent.apikey")
+            Button("Save and start") {
+                model.saveAPIKey(apiKey)
+                apiKey = ""
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(apiKey.trimmingCharacters(in: .whitespaces).isEmpty)
+            .accessibilityIdentifier("agent.apikey.save")
+        }
+        .padding()
+        .frame(maxWidth: 520)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("agent.apikey.card")
+    }
+}
+
 struct SettingsView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
+    @AppStorage(AgentSettings.modelKey) private var agentModel = AgentSettings.defaultModel
+    @AppStorage(AgentSettings.effortKey) private var agentEffort = AgentSettings.defaultEffort
     @State private var apiKey = ""
     @State private var pingMs: Double?
     @State private var customPin = PackagePin(name: "@anthropic-ai/claude-code", version: "", tarball: "", integrity: "")
@@ -124,7 +158,20 @@ struct SettingsView: View {
                 } header: {
                     Text("Authentication")
                 } footer: {
-                    Text("New Claude Code tabs get the key as ANTHROPIC_API_KEY. Without a key, use /login inside Claude Code to sign in with your Claude account; its credentials are kept in ~/.claude.")
+                    Text("New Claude Code and Agent tabs get the key as ANTHROPIC_API_KEY. Without a key, use /login inside Claude Code to sign in with your Claude account; its credentials are kept in ~/.claude. The Agent tab always needs the key.")
+                }
+
+                Section {
+                    Picker("Model", selection: $agentModel) {
+                        ForEach(AgentSettings.models, id: \.id) { m in Text(m.label).tag(m.id) }
+                    }
+                    Picker("Effort", selection: $agentEffort) {
+                        ForEach(AgentSettings.efforts, id: \.self) { Text($0).tag($0) }
+                    }
+                } header: {
+                    Text("Agent")
+                } footer: {
+                    Text("Defaults for new Agent tabs; /model and /effort change one tab. The agent uses the Messages API with your API key (billed there), runs its tools in the Linux layer, and is TermForge's own code, not Claude Code.")
                 }
 
                 Section("Claude Code") {

@@ -199,11 +199,47 @@ told `{event:"linux", available:true}`. Each session worker has a `LinuxTier`
 The desktop test double (`nodejs-tests/host-client.js`) answers exec requests with real
 host processes, so `nodejs-tests/exec.test.js` covers the whole protocol without iOS.
 
+## Agent tab (Messages API)
+
+Claude Code 2.1.112 is the newest client that runs on Node 18, and the API refuses the
+newest models to it (`claude_code_version_too_old`: Opus 5.5 wants ≥ 2.1.280, Fable 5.1
+≥ 2.1.251). TermForge does not spoof a client version — Anthropic's terms forbid modifying
+the installed Claude Code — so the latest models come through a second kind of tab that is
+TermForge's own code: `nodejs-project/agent/`, a chat on the Messages API with the user's
+API key (Keychain → `ANTHROPIC_API_KEY`; billed to the API account, never a subscription).
+
+- `agent/api.js` — raw HTTP over the session's `fetch` (the jitless shim) with an SSE
+  parser and a message assembler; retries 408/409/429/5xx/529 and connection failures with
+  `retry-after`/backoff until the first content block has arrived. No SDK: nothing can be
+  npm-installed at runtime on the device and the official SDK has dependencies of its own.
+- `agent/tools.js` — `read_file`, `write_file`, `edit_file`, `list_dir` (confined to the
+  Documents folder, `/mnt/termforge/...` paths accepted) and `bash` (`bash -c` through the
+  session's `child_process` shim, so it runs inside the Alpine root like Claude Code's
+  tools; 64 KB output cap, 120 s default timeout). All tools set `eager_input_streaming`,
+  so the client validates: strict `JSON.parse` of the fragments, then a schema check, and
+  a broken call goes back as an `INVALID_JSON` error result instead of running.
+- `agent/loop.js` — append-only history (assistant content replayed unchanged, thinking
+  signatures included), every tool result of a turn in one user message, `max_tokens` and
+  `refusal` stops handled before any tool runs, `thinking: adaptive` +
+  `output_config.effort`, `fallbacks: "default"` (beta `server-side-fallback-2026-07-01`)
+  on the models that take it, and a cached prefix: tools → system prompt (breakpoint) →
+  messages (top-level `cache_control`). Cost is estimated from the usage block with the
+  table in `MODELS`.
+- `agent/main.mjs` — the terminal UI on `readline` over the virtual TTY: streamed text,
+  `⚙ tool` lines with result previews, a per-turn usage/cost line, `/model`, `/models`,
+  `/effort`, `/clear`, `/cost`, `/exit`; Ctrl-C aborts the in-flight request through the
+  fetch shim's `AbortSignal`.
+
+Swift: `SessionKind.agent`, `TabKind.node(.agent)`, the "Agent (API key)…" item in the
+tab menu, `APIKeyCard` in a tab that has no key yet (saving the key restarts those tabs),
+and a Settings section for the default model and effort (`AgentSettings`, passed as
+`TERMFORGE_AGENT_MODEL` / `TERMFORGE_AGENT_EFFORT`).
+
 ## Tests
 
 | suite | runs on | what |
 |---|---|---|
-| `nodejs-tests/` (node:test) | Node 18.20.4 `--jitless`, CI ubuntu + local | frame codec, vtty line discipline, shim semantics vs real Node, installer (integrity, pax/GNU names, traversal), supervisor over TCP incl. two tabs with separate cwds |
+| `nodejs-tests/` (node:test) | Node 18.20.4 `--jitless`, CI ubuntu + local | frame codec, vtty line discipline, shim semantics vs real Node, installer (integrity, pax/GNU names, traversal), supervisor over TCP incl. two tabs with separate cwds; the agent against a scripted Messages API (SSE split across writes, two tool calls in one turn incl. `bash` through the Linux tier, history replay, 529 retry, `INVALID_JSON`, refusal, slash commands, no-key exit) |
 | `tools/desktop-harness` | same | boots the real supervisor, installs Claude Code from npm, renders it in a headless xterm, drives keys, reports timings |
 | `tools/ish/test-linux.sh` | Linux (iSH built natively) | the C shim: boot, pty session, piped exec against the Alpine root |
 | `Tests/TermForgeTests` | iOS simulator (CI) | Swift frame codec parity with JS; the real nodejs-mobile runtime: pings, raw-mode TTY program, REPL, NOT_INSTALLED; Claude Code install + first screen; Linux root install, boot, bash/python3/git/rg, piped git init+commit |

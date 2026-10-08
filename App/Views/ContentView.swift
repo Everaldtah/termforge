@@ -62,7 +62,11 @@ struct SessionView: View {
                 TerminalHostView(controller: session.controller, focusOnAppear: !model.uiTestMode)
                 if let exit = session.exit {
                     if exit.notInstalled {
-                        if session.kind == .linux { LinuxInstallCard().padding() } else { InstallCard().padding() }
+                        switch session.kind {
+                        case .linux: LinuxInstallCard().padding()
+                        case .node(.agent): APIKeyCard().padding()
+                        default: InstallCard().padding()
+                        }
                     } else {
                         ExitBanner(session: session, exit: exit).padding(.bottom, 8)
                     }
@@ -70,6 +74,9 @@ struct SessionView: View {
             }
             if session.kind.isClaude && session.running {
                 ClaudeQuickActions(session: session)
+            }
+            if session.kind == .node(.agent) && session.running {
+                AgentQuickActions(session: session)
             }
             if model.uiTestMode {
                 UITestProbe(session: session)
@@ -121,6 +128,32 @@ struct ClaudeQuickActions: View {
             .font(.footnote.monospaced())
             .buttonStyle(.bordered)
             .accessibilityIdentifier("quick.\(title)")
+    }
+}
+
+/// Agent tab shortcuts: its slash commands and Ctrl-C (stops the running request).
+struct AgentQuickActions: View {
+    @ObservedObject var session: TerminalSession
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                action("/model") { session.send("/model\r") }
+                action("/cost") { session.send("/cost\r") }
+                action("/clear") { session.send("/clear\r") }
+                action("Ctrl-C") { session.interrupt() }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+        }
+        .background(Color(white: 0.11))
+    }
+
+    private func action(_ title: String, _ run: @escaping () -> Void) -> some View {
+        Button(title, action: run)
+            .font(.footnote.monospaced())
+            .buttonStyle(.bordered)
+            .accessibilityIdentifier("agent.\(title)")
     }
 }
 

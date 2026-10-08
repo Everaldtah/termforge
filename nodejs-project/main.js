@@ -129,6 +129,8 @@ function openSession(channel, spec) {
     }
     data.entry = path.join(dir, pins['claude-code'].entry);
   }
+  // the agent tab ships with the app (our own code), no install step
+  if (spec.kind === 'agent') data.entry = path.join(__dirname, 'agent', 'main.mjs');
   fs.mkdirSync(data.cwd, { recursive: true });
   const opened = Date.now();
   const worker = new Worker(path.join(__dirname, 'lib', 'session-worker.js'), {

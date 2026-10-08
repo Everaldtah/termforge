@@ -129,6 +129,7 @@ async function run() {
       return;
     }
     case 'script':
+    case 'agent':
     case 'claude': {
       const entry = path.resolve(spec.entry);
       process.argv = [process.execPath, entry, ...(spec.argv || [])];

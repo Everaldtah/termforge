@@ -8,6 +8,8 @@ public enum SessionKind: String, Codable, Sendable, CaseIterable {
     case repl
     /// Any JavaScript entry file.
     case script
+    /// TermForge's own agent on the Messages API (ships with the app; needs an API key).
+    case agent
 }
 
 /// Sent to Node in the OPEN frame.

@@ -149,6 +149,7 @@ final class AppModel: ObservableObject {
         guard !trimmed.isEmpty else { return }
         Keychain.set(trimmed, for: Keychain.anthropicAPIKey)
         hasAPIKey = true
+        restartWaiting(for: .node(.agent))
     }
 
     func deleteAPIKey() {
