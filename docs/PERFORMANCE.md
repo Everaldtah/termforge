@@ -20,7 +20,20 @@ code changes.
 | script.openToFirstOutput | 424 ms | 34 ms | 38 ms | OPEN frame → first byte from a new worker |
 | repl.openToPrompt | – | 40 ms | 275 ms | OPEN → Node REPL prompt visible |
 | claude.install | – | – | 538–647 ms | download 13.4 MB tarball from registry.npmjs.org + SHA-512 + unpack (runner network) |
-| claude.openToFirstScreen | – | – | **not reached** | Claude Code failed to load: no ICU in upstream nodejs-mobile (LIMITATIONS.md) |
+| claude.openToFirstScreen | – | – | **not reached** | upstream nodejs-mobile has no ICU (LIMITATIONS.md) |
+
+With the ICU build of nodejs-mobile (run 37728463558, 2026-10-08, arm64 simulator on a
+macos-15 runner): Claude Code **reaches its first screen** ("Choose the text style").
+
+| metric | value | what it is |
+|---|---|---|
+| claude.install | 1201 ms | 48 MB package from registry.npmjs.org, SHA-512, unpack |
+| claude.session.entryLoaded | 2140 ms | `import` of the 13.4 MB cli.js under jitless V8 |
+| claude.openToFirstOutput | 3170 ms | OPEN frame → first byte on the Swift side |
+| linux.rootfs.download | 2319 ms | 107 MB from GitHub releases (runner network) |
+| linux.rootfs.import | 5834 ms | tar.gz → fakefs (iSH's `fakefs_import`, simulator disk) |
+| linux.boot | 201 ms | `tf_ish_boot`: mount root, /proc, /dev/pts, host mount, init |
+| linux.session | – | **process crashed** on the first pty session; under investigation |
 
 The keystroke path above stops at the Swift side; it does not include SwiftTerm's
 render. No screen-latency measurement exists yet.
