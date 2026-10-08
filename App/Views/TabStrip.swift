@@ -24,7 +24,13 @@ struct TabStrip: View {
                 }
                 .accessibilityIdentifier("new.claude")
                 Button {
-                    model.newSession(kind: .repl)
+                    model.newSession(kind: .linux)
+                } label: {
+                    Label("Linux shell (Alpine)", systemImage: "terminal")
+                }
+                .accessibilityIdentifier("new.linux")
+                Button {
+                    model.newSession(kind: .node(.repl))
                 } label: {
                     Label("Node REPL", systemImage: "chevron.left.forwardslash.chevron.right")
                 }
@@ -46,7 +52,7 @@ struct TabStrip: View {
         .sheet(isPresented: $showProjects) {
             ProjectPicker { project in
                 showProjects = false
-                model.newSession(kind: .claude, project: project)
+                model.newSession(kind: .node(.claude), project: project)
             }
         }
     }
@@ -77,7 +83,7 @@ struct TabChip: View {
         .padding(.vertical, 6)
         .background(selected ? Color(white: 0.2) : Color(white: 0.13), in: RoundedRectangle(cornerRadius: 8))
         .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("tab.\(session.kind.rawValue)")
+        .accessibilityIdentifier("tab.\(session.kind.saveName)")
     }
 }
 

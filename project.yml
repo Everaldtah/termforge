@@ -34,6 +34,8 @@ packages:
     path: Packages/NodeCore
   TerminalUI:
     path: Packages/TerminalUI
+  LinuxCore:
+    path: Packages/LinuxCore
 
 targets:
   TermForge:
@@ -49,6 +51,7 @@ targets:
     dependencies:
       - package: NodeCore
       - package: TerminalUI
+      - package: LinuxCore
     info:
       path: App/Info.plist
       properties:
@@ -86,6 +89,7 @@ targets:
     dependencies:
       - target: TermForge
       - package: NodeCore
+      - package: LinuxCore
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.everaldtah.termforge.tests

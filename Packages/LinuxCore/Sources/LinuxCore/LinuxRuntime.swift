@@ -96,11 +96,11 @@ public final class LinuxRuntime: @unchecked Sendable {
     }
 
     /// Runs a program with piped stdio. `stdout`/`stderr` receive data as it arrives (on a
-    /// background queue); `completion` gets the exit status. Returns the guest pid.
-    @discardableResult
-    public func exec(argv: [String], env: [String: String], cwd: String?, stdin: Data?,
+    /// background queue) and `completion` the exit status. Feed stdin through the returned
+    /// handle; close it when done, or the program may wait for input forever.
+    public func exec(argv: [String], env: [String: String], cwd: String?,
                      stdout: @escaping (Data) -> Void, stderr: @escaping (Data) -> Void,
-                     completion: @escaping (Int32) -> Void) throws -> Int32 {
+                     completion: @escaping (Int32) -> Void) throws -> LinuxExec {
         guard booted else { throw LinuxError.notBooted }
         let inPipe = Pipe(), outPipe = Pipe(), errPipe = Pipe()
         outPipe.fileHandleForReading.readabilityHandler = { h in
@@ -125,12 +125,10 @@ public final class LinuxRuntime: @unchecked Sendable {
             try? inPipe.fileHandleForWriting.close()
             throw LinuxError.kernel(-pid, "exec \(argv.first ?? "")")
         }
-        if let stdin, !stdin.isEmpty { inPipe.fileHandleForWriting.write(stdin) }
-        try? inPipe.fileHandleForWriting.close()
         lock.lock()
         execs[pid] = completion
         lock.unlock()
-        return pid
+        return LinuxExec(pid: pid, stdin: inPipe.fileHandleForWriting, runtime: self)
     }
 
     public func kill(pid: Int32, signal: Int32) {
@@ -156,6 +154,40 @@ public final class LinuxRuntime: @unchecked Sendable {
         if let completion { DispatchQueue.global().async { completion(code) } }
         session?.finished(code: code)
     }
+}
+
+/// A program started with `LinuxRuntime.exec`: its pid and the write end of its stdin.
+public final class LinuxExec: @unchecked Sendable {
+    public let pid: Int32
+    private let stdin: FileHandle
+    private weak var runtime: LinuxRuntime?
+    private let lock = NSLock()
+    private var stdinOpen = true
+
+    init(pid: Int32, stdin: FileHandle, runtime: LinuxRuntime) {
+        self.pid = pid
+        self.stdin = stdin
+        self.runtime = runtime
+    }
+
+    public func writeStdin(_ data: Data) {
+        lock.lock(); defer { lock.unlock() }
+        guard stdinOpen, !data.isEmpty else { return }
+        try? stdin.write(contentsOf: data)
+    }
+
+    public func closeStdin() {
+        lock.lock(); defer { lock.unlock() }
+        guard stdinOpen else { return }
+        stdinOpen = false
+        try? stdin.close()
+    }
+
+    public func kill(signal: Int32 = 15) {
+        runtime?.kill(pid: pid, signal: signal)
+    }
+
+    deinit { closeStdin() }
 }
 
 /// A process on a pseudo-terminal inside the Linux layer.

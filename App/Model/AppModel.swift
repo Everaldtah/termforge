@@ -1,4 +1,6 @@
+import Combine
 import Foundation
+import LinuxCore
 import NodeCore
 import SwiftUI
 import UIKit
@@ -17,7 +19,9 @@ final class AppModel: ObservableObject {
 
     let uiTestMode = ProcessInfo.processInfo.arguments.contains("-UITestMode")
     let runtime = NodeRuntime.shared
+    let linux = LinuxLayer()
     private var restored = false
+    private var linuxObserver: AnyCancellable?
     private static let savedSessionsKey = "sessions.v1"
 
     #if SIDELOAD
@@ -36,6 +40,10 @@ final class AppModel: ObservableObject {
             return
         }
         Paths.ensureProjects()
+        linux.startIfInstalled()
+        linuxObserver = linux.$state.sink { [weak self] state in
+            if state.isReady { self?.restartWaiting(for: .linux) }
+        }
         runtime.onEvent = { [weak self] event in self?.handleRuntimeEvent(event) }
         runtime.observeState { [weak self] state in
             guard let self else { return }
@@ -53,11 +61,12 @@ final class AppModel: ObservableObject {
         let saved = loadSavedSessions()
         if saved.isEmpty {
             // UI tests always start from a Node REPL tab, installed Claude Code or not
-            let first: SessionKind = claude?.installed != nil && !uiTestMode ? .claude : .repl
+            let first: TabKind = claude?.installed != nil && !uiTestMode ? .node(.claude) : .node(.repl)
             newSession(kind: first, project: Paths.defaultProject)
         } else {
             for item in saved {
-                newSession(kind: item.kind, project: URL(fileURLWithPath: item.project), resume: item.kind == .claude)
+                let kind = TabKind(saveName: item.kind)
+                newSession(kind: kind, project: URL(fileURLWithPath: item.project), resume: kind.isClaude)
             }
         }
     }
@@ -69,14 +78,19 @@ final class AppModel: ObservableObject {
 
     // MARK: sessions
 
-    func newSession(kind: SessionKind, project: URL = Paths.defaultProject, resume: Bool = false) {
+    func newSession(kind: TabKind, project: URL = Paths.defaultProject, resume: Bool = false) {
         let session = TerminalSession(kind: kind, project: project, resume: resume)
         if uiTestMode { session.startSnapshotting() }
         sessions.append(session)
         selectedID = session.id
-        // a Claude tab without an install comes straight back as NOT_INSTALLED, which shows the install card
+        // a tab whose runtime is not installed comes straight back as NOT_INSTALLED, which shows the install card
         session.start(apiKey: apiKey)
         saveSessions()
+    }
+
+    /// Tabs waiting for a runtime (Claude Code, the Linux root) start once it is ready.
+    func restartWaiting(for kind: TabKind) {
+        for s in sessions where s.kind == kind && !s.running && s.exit?.notInstalled == true { s.restart(apiKey: apiKey) }
     }
 
     func close(_ session: TerminalSession) {
@@ -108,7 +122,7 @@ final class AppModel: ObservableObject {
                 installProgress = nil
                 installMessage = "Installed \(result.version) in \(Int(result.ms)) ms (\(result.written) files, unmodified)"
                 await refreshStatus()
-                for s in sessions where s.kind == .claude && !s.running { s.restart(apiKey: apiKey) }
+                restartWaiting(for: .node(.claude))
             } catch {
                 installProgress = nil
                 installMessage = "Install failed: \(error.localizedDescription)"
@@ -156,12 +170,12 @@ final class AppModel: ObservableObject {
     }
 
     private struct SavedSession: Codable {
-        var kind: SessionKind
+        var kind: String
         var project: String
     }
 
     private func saveSessions() {
-        let items = sessions.filter { $0.kind != .script }.map { SavedSession(kind: $0.kind, project: $0.project.path) }
+        let items = sessions.filter { $0.kind != .node(.script) }.map { SavedSession(kind: $0.kind.saveName, project: $0.project.path) }
         UserDefaults.standard.set(try? JSONEncoder().encode(items), forKey: Self.savedSessionsKey)
     }
 

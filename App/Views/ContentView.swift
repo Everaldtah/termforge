@@ -37,7 +37,7 @@ struct RuntimeStatusView: View {
                 Text("Starting Node…").foregroundStyle(.secondary)
             case .ready:
                 Text("No open tabs").foregroundStyle(.secondary)
-                Button("New Claude Code tab") { model.newSession(kind: .claude) }
+                Button("New Claude Code tab") { model.newSession(kind: .node(.claude)) }
             case .stopped(let why):
                 Image(systemName: "exclamationmark.triangle").font(.largeTitle)
                 Text("The Node runtime stopped").font(.headline)
@@ -62,13 +62,13 @@ struct SessionView: View {
                 TerminalHostView(controller: session.controller, focusOnAppear: !model.uiTestMode)
                 if let exit = session.exit {
                     if exit.notInstalled {
-                        InstallCard().padding()
+                        if session.kind == .linux { LinuxInstallCard().padding() } else { InstallCard().padding() }
                     } else {
                         ExitBanner(session: session, exit: exit).padding(.bottom, 8)
                     }
                 }
             }
-            if session.kind == .claude && session.running {
+            if session.kind.isClaude && session.running {
                 ClaudeQuickActions(session: session)
             }
             if model.uiTestMode {

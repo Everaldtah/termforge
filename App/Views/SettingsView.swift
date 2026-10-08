@@ -50,6 +50,52 @@ struct InstallControls: View {
     }
 }
 
+/// Shown in a Linux tab until the Alpine root is installed.
+struct LinuxInstallCard: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Install the Linux root").font(.headline)
+            Text("TermForge downloads an Alpine Linux x86 root (about 100 MB, built by this project's CI from Alpine's own packages), checks its SHA-256, and runs it in the embedded iSH emulator. Your Documents folder appears inside it at /mnt/termforge.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            LinuxInstallControls(layer: model.linux)
+        }
+        .padding()
+        .frame(maxWidth: 520)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("linux.install.card")
+    }
+}
+
+struct LinuxInstallControls: View {
+    @ObservedObject var layer: LinuxLayer
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            switch layer.state {
+            case .notInstalled, .failed:
+                Button("Install Alpine") { layer.install() }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("linux.install.button")
+                if case .failed(let why) = layer.state {
+                    Text(why).font(.caption.monospaced()).foregroundStyle(.secondary)
+                }
+            case .downloading(let p):
+                ProgressView(value: p) { Text("Downloading…") }
+            case .importing:
+                ProgressView { Text("Converting to the emulator's filesystem…") }
+            case .booting:
+                ProgressView { Text("Booting…") }
+            case .ready:
+                Text("Ready").font(.caption.monospaced()).foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
 struct SettingsView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
@@ -103,6 +149,16 @@ struct SettingsView: View {
                     .autocorrectionDisabled()
                 }
 
+                Section("Linux layer") {
+                    let layer = model.linux
+                    LabeledContent("Root", value: layer.pin.name)
+                    LabeledContent("State", value: linuxStateText(layer.state))
+                    if let ms = layer.importMs { LabeledContent("Import", value: String(format: "%.0f ms", ms)) }
+                    if let ms = layer.bootMs { LabeledContent("Boot", value: String(format: "%.0f ms", ms)) }
+                    if layer.state.isReady { LabeledContent("Kernel", value: layer.runtime.version) }
+                    LinuxInstallControls(layer: model.linux)
+                }
+
                 Section("Runtime") {
                     switch model.runtimeState {
                     case .ready(let hello):
@@ -144,6 +200,17 @@ struct SettingsView: View {
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
             }
         }
+    }
+}
+
+private func linuxStateText(_ state: LinuxLayer.State) -> String {
+    switch state {
+    case .notInstalled: return "not installed"
+    case .downloading(let p): return String(format: "downloading %.0f%%", p * 100)
+    case .importing: return "importing"
+    case .booting: return "booting"
+    case .ready: return "running"
+    case .failed(let why): return "failed: \(why)"
     }
 }
 

@@ -52,14 +52,18 @@ jobs:
           xcodebuild -version
       - name: Tools
         run: brew install xcodegen
-      - name: Cache nodejs-mobile
+      - name: Cache vendored frameworks
         uses: actions/cache@v4
         with:
-          path: Packages/NodeCore/Vendor
-          key: nodejs-mobile-${{ hashFiles('scripts/fetch-nodejs-mobile.sh') }}
+          path: |
+            Packages/NodeCore/Vendor
+            Packages/LinuxCore/Vendor
+          key: vendor-${{ hashFiles('scripts/fetch-nodejs-mobile.sh', 'scripts/fetch-ish.sh') }}
       - name: Generate project
         run: |
+          chmod +x scripts/*.sh
           scripts/fetch-nodejs-mobile.sh
+          scripts/fetch-ish.sh
           xcodegen generate
       - name: Pick a simulator
         run: |
