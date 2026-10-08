@@ -74,9 +74,8 @@ final class AppModel: ObservableObject {
         if uiTestMode { session.startSnapshotting() }
         sessions.append(session)
         selectedID = session.id
-        if kind != .claude || claude?.installed != nil {
-            session.start(apiKey: apiKey)
-        }
+        // a Claude tab without an install comes straight back as NOT_INSTALLED, which shows the install card
+        session.start(apiKey: apiKey)
         saveSessions()
     }
 
