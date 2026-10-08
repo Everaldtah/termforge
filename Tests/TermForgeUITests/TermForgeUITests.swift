@@ -124,8 +124,14 @@ final class TermForgeUITests: XCTestCase {
             if seen.contains("WelcometoClaudeCode") || seen.contains("Choosethetextstyle") { break }
             RunLoop.current.run(until: Date().addingTimeInterval(0.5))
         }
+        for line in screenText().split(separator: "\n") { print("UISCREEN| \(line)") }
+        print("UISCREEN| tabs: \(app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'tab.'")).count), install card: \(app.descendants(matching: .any)["install.card"].exists), restart: \(app.buttons["session.restart"].exists)")
+        let failShot = XCTAttachment(screenshot: app.screenshot())
+        failShot.name = "claude-tab"
+        failShot.lifetime = .keepAlways
+        add(failShot)
         XCTAssertTrue(seen.contains("ClaudeCode") || seen.contains("Choosethetextstyle"),
-                      "Claude Code did not render its first screen; screen:\n\(seen)\nUI:\n\(app.debugDescription)")
+                      "Claude Code did not render its first screen; screen:\n\(seen)")
         print(String(format: "METRIC uitest.installTapToClaudeScreen %.0f ms", Date().timeIntervalSince(started) * 1000))
         let shot = XCTAttachment(screenshot: app.screenshot())
         shot.name = "claude-code-first-screen"

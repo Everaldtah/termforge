@@ -88,7 +88,7 @@ jobs:
             -destination "platform=iOS Simulator,id=$SIM" \
             -resultBundlePath "$RUNNER_TEMP/TermForge.xcresult" \
             -skipPackagePluginValidation -skipMacroValidation \
-            2>&1 | tee "$RUNNER_TEMP/test.log" | grep -E --line-buffered '^(Test (Case|Suite)|METRIC|CLAUDE\||EXEC\||LINUX\||.*error:|\*\* TEST)' || true
+            2>&1 | tee "$RUNNER_TEMP/test.log" | grep -E --line-buffered '^(Test (Case|Suite)|METRIC|CLAUDE\||EXEC\||LINUX||UISCREEN||.*error:\||.*error:|\*\* TEST)' || true
           grep -q '\*\* TEST SUCCEEDED \*\*' "$RUNNER_TEMP/test.log"
       - name: Crash reports (simulator processes that died during the tests)
         if: always()

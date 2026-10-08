@@ -71,7 +71,24 @@ final class SimulatorLinuxTests: XCTestCase {
         await fulfillment(of: [done], timeout: 120)
         metric("linux.session.bashPythonGitRg", (CACurrentMediaTime() - t1) * 1000)
         let text = String(decoding: output, as: UTF8.self)
+        print("LINUX| session exit=\(exitCode) bytes=\(output.count) hex=\(output.prefix(120).map { String(format: "%02x", $0) }.joined())")
         for line in text.split(separator: "\n") { print("LINUX| \(line)") }
+        // each tool on its own, plus the device nodes, to see what is lost or broken on iOS
+        let probes = [
+            "python3 -c 'print(\"py\", 1+1)'", "git --version", "rg --version | head -1", "cat /mnt/termforge/hello.txt",
+            "echo one; sleep 1; echo two", "ls -la /dev/null /dev/zero /dev/tty /dev/pts; stat -c '%n %F %t:%T' /dev/null /dev/zero",
+            "cat /dev/null && echo null-read-ok; echo x > /dev/null && echo null-write-ok; : > /dev/null && echo null-trunc-ok",
+        ]
+        for cmd in probes {
+            let one = try runtime.startSession(argv: ["/bin/sh", "-c", cmd], env: env, cwd: "/root", cols: 80, rows: 24)
+            var got = Data()
+            let fin = expectation(description: cmd)
+            var rc: Int32 = -1
+            one.onOutput = { got.append($0) }
+            one.onExit = { c in rc = c; fin.fulfill() }
+            await fulfillment(of: [fin], timeout: 60)
+            print("LINUX| [\(cmd)] exit=\(rc) bytes=\(got.count): \(String(decoding: got, as: UTF8.self).replacingOccurrences(of: "\r\n", with: " | "))")
+        }
         XCTAssertEqual(exitCode, 3)
         XCTAssertTrue(text.contains("bash=5."), text)
         XCTAssertTrue(text.contains("py 2"), text)
