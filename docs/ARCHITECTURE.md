@@ -47,6 +47,10 @@ sections when they land.
     the URL. Everything else falls through to `none`.
   - Phase 3 adds the Linux tier (git, bash, rg, ...). FastPath adds Swift-native and wasm
     tiers in front of it.
+- **jitless V8 has no WebAssembly, and Node 18's `fetch` needs it.** `lib/fetch-https.js`
+  installs a `fetch` built on Node's http/https client in every worker (same `Response`,
+  `Headers`, `Request` classes; streaming bodies via `Readable.toWeb`). Claude Code's API
+  client is a `fetch` user, so without this no prompt can be sent.
 - **Worker threads share one OS working directory.** `lib/virtual-cwd.js` gives each
   tab its own `process.cwd()`/`chdir()`. It also resolves relative path arguments of
   `fs`, `fs/promises` and their Sync forms against that cwd before they reach libuv.

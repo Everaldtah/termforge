@@ -13,6 +13,7 @@ const { VirtualTerminal } = require('./vtty');
 const shim = require('./child-process-shim');
 const virtualCwd = require('./virtual-cwd');
 const { LinuxTier } = require('./linux-tier');
+const fetchHttps = require('./fetch-https');
 
 const spec = workerData;
 const t0 = Date.now();
@@ -82,6 +83,8 @@ defineProcessProp('stderr', term.stderr);
 globalThis.console = new console.Console({ stdout: term.stdout, stderr: term.stderr, colorMode: true });
 if (spec.platform) Object.defineProperty(process, 'platform', { configurable: true, enumerable: true, value: spec.platform });
 virtualCwd.install(spec.cwd || process.cwd());
+// Node 18's fetch needs WebAssembly, which jitless V8 lacks; Claude Code's API client uses fetch
+fetchHttps.install();
 process.on('exit', flush);
 
 // ---- child_process: host URL opener first, then the Linux layer (when the app has booted it)

@@ -63,9 +63,14 @@ From code.claude.com/docs/en/legal-and-compliance, 2026-10-08:
 ## No JIT (by design)
 
 - V8 runs with `--jitless`, which App Store rules require. Everything is interpreted.
-- jitless V8 has **no WebAssembly** (`--expose_wasm` is disabled). Claude Code 2.1.112
-  reaches its first screen without it on desktop Node 18 `--jitless`. Any npm tool that
-  needs wasm will not run in a Node tab.
+- jitless V8 has **no WebAssembly** (`--expose_wasm` is disabled). Node 18's built-in
+  `fetch` (undici) parses HTTP with a wasm module, so every `fetch()` failed with
+  "fetch failed" and Claude Code's API client retried forever ("retrying in 1m13") —
+  seen on the first device build, reproduced on Linux. `nodejs-project/lib/fetch-https.js`
+  replaces the global `fetch` in every session with one built on Node's http/https client
+  (streaming bodies, redirects, AbortSignal, gzip), and Claude Code 2.1.112 then answers
+  prompts under jitless (verified on Linux with a real login). Anything else that needs
+  wasm still does not run in a Node tab.
 - Startup cost: see PERFORMANCE.md. No device number exists yet.
 
 ## Phase 1 status (measured)
