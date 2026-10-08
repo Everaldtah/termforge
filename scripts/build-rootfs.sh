@@ -95,6 +95,13 @@ export TERMFORGE_HOME=/mnt/termforge
 [ -d "$TERMFORGE_HOME" ] && cd "$TERMFORGE_HOME" 2>/dev/null
 EOF
 sed -i 's|^root:x:0:0:root:/root:/bin/ash|root:x:0:0:root:/root:/bin/bash|' "$ROOTFS/etc/passwd"
+# The host mount's files belong to the app's uid while the guest runs as root; without
+# this git refuses every repository under /mnt/termforge ("dubious ownership").
+printf '[safe]
+	directory = *
+[init]
+	defaultBranch = main
+' > "$ROOTFS/etc/gitconfig"
 printf 'ALPINE=%s\nAPK_TOOLS=%s\nPACKAGES=%s\nBUILT=%s\n' "$ALPINE_RELEASE" "$APK_TOOLS_VERSION" "$PACKAGES" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$ROOTFS/etc/termforge-release"
 
 # What has been verified under the emulator (iSH on Linux x86_64, 2026-10-08) and what has
