@@ -48,9 +48,17 @@ From code.claude.com/docs/en/legal-and-compliance, 2026-10-08:
   fails to load: `SyntaxError: Invalid regular expression:
   /^\p{Default_Ignorable_Code_Point}$/: Invalid property name`. The same error
   reproduces on a Linux Node 18.20.4 built `--with-intl=none`.
-- Fix: rebuild nodejs-mobile with `small-icu` (`.github/workflows/build-nodejs-mobile.yml`).
+- Node's `small-icu` is not enough either: its trim drops ICU's break-iterator data, and
+  V8 then aborts the process inside `Intl.Segmenter` (exit 1, no message), which Claude
+  Code's renderer uses for text width. Measured on Linux: `small-icu` runs `cli.js`
+  silently; `small-icu` plus `brkitr`/`brkfiles`/`brkdict` renders the first screen.
+- Fix: `.github/workflows/build-nodejs-mobile.yml` with `tools/nodejs-mobile/patch-icu.sh`
+  (small-icu, break-iterator data kept, ICU host tools built against the macOS SDK; the
+  stock iOS gyp config links them for iPhoneOS, so `icutrim.py` cannot run them).
   Rewriting Claude Code's regular expressions would modify Claude Code, which the terms
   above forbid, and without ICU there is no `Intl` either.
+- English-only locale data: `toLocaleString`, dates and currencies format in English on
+  every device locale.
 
 ## No JIT (by design)
 

@@ -39,19 +39,23 @@ json.dump(j, open(p, "w"), indent=2)
 PY
 grep -q '"brkfiles": "leavealone"' "$TRIM" || { echo "could not patch $TRIM" >&2; exit 1; }
 
-# 3. host toolset builds against the macOS SDK (gyp evaluates target_conditions per toolset;
-#    an empty IPHONEOS_DEPLOYMENT_TARGET makes gyp emit -mmacosx-version-min instead)
+# 3. host toolset builds against the macOS SDK. This goes at the top of target_defaults:
+#    gyp drops target_conditions that sit inside a conditions block of target_defaults
+#    (verified with a gypd dump), while this placement reaches every target. An empty
+#    IPHONEOS_DEPLOYMENT_TARGET makes gyp emit -mmacosx-version-min instead.
 perl -0pi - "$GYPI" <<'PERL'
-s/(\['OS=="ios"', \{\n\s*'defines': \['_DARWIN_USE_64_BIT_INODE=1'\],\n)/$1        'target_conditions': [
-          ['_toolset=="host"', {
-            'xcode_settings': {
-              'SDKROOT': 'macosx',
-              'MACOSX_DEPLOYMENT_TARGET': '11.0',
-              'IPHONEOS_DEPLOYMENT_TARGET': '',
-              'ENABLE_BITCODE': 'NO',
-            },
-          }],
-        ],
+s/(\n  'target_defaults': \{\n)/$1    'target_conditions': [
+      ['OS=="ios" and _toolset=="host"', {
+        'xcode_settings': {
+          'SDKROOT': 'macosx',
+          'MACOSX_DEPLOYMENT_TARGET': '11.0',
+          'IPHONEOS_DEPLOYMENT_TARGET': '',
+          'ENABLE_BITCODE': 'NO',
+          'OTHER_CFLAGS!': ['-fembed-bitcode'],
+          'OTHER_CPLUSPLUSFLAGS!': ['-fembed-bitcode'],
+        },
+      }],
+    ],
 /;
 PERL
 grep -q "'SDKROOT': 'macosx'" "$GYPI" || { echo "could not patch $GYPI (iOS block not found)" >&2; exit 1; }
