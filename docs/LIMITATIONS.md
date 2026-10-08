@@ -133,6 +133,11 @@ From code.claude.com/docs/en/legal-and-compliance, 2026-10-08:
 - Verified under iSH on Linux with the shipped root: bash, coreutils, git, ripgrep,
   python3 (ssl, sqlite3, subprocess), apk, gcc/build-base, ssh client. gcc needs `PATH`
   set (the app always sets one). Untested: nodejs, rust, go, java.
+- Device nodes: fakefs stores a tar entry's `rdev` as the host `dev_t` and iSH uses it
+  unchanged as the guest's. On Linux `makedev(1,3)` happens to equal the guest encoding;
+  on Darwin it is `0x01000003`, so nodes imported on iOS point at missing majors
+  (`/dev/null` → ENXIO, seen as `git` exit 128 in the simulator). The rootfs therefore
+  ships no `/dev` entries and the shim unlinks any before iSH recreates them at boot.
 - Unprivileged-user-namespace builds of the rootfs (dev only) leave `etc/shadow` owned
   by root:root; release images are built as real root in CI.
 - The in-app shell runs as root inside the emulator, like iSH. The host mount at
