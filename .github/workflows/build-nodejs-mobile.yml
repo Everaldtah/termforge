@@ -1,0 +1,90 @@
+# Rebuilds nodejs-mobile v18.20.4 for iOS with ICU (small-icu) and publishes
+# NodeMobile.xcframework as a release asset of this repository.
+#
+# Why: upstream's iOS build uses --with-intl=none, so V8 has no `Intl` object and cannot
+# parse Unicode property escapes (\p{...}); Claude Code's bundle fails to load with
+# "SyntaxError: Invalid regular expression ... Invalid property name". See docs/LIMITATIONS.md.
+#
+# Manual only: each build job runs for a long time on a macOS runner.
+name: Build nodejs-mobile (iOS, small-icu)
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: "macOS runner image (upstream builds Node 18 with Xcode 15)"
+        default: macos-14
+      xcode:
+        description: "Xcode version prefix to select"
+        default: "15.4"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [arm64, arm64-simulator]
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: nodejs-mobile/nodejs-mobile
+          ref: v18.20.4
+          path: nodejs-mobile
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Xcode ${{ inputs.xcode }}
+        run: |
+          X=$(ls -d /Applications/Xcode_${{ inputs.xcode }}*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$X" ]; then echo "no Xcode ${{ inputs.xcode }} on this image:"; ls /Applications | grep -i xcode; exit 1; fi
+          sudo xcode-select -s "$X/Contents/Developer"
+          xcodebuild -version
+          sysctl -n hw.ncpu hw.memsize
+      - name: Patch for ICU
+        run: tools/nodejs-mobile/patch-icu.sh nodejs-mobile
+      - name: Build
+        working-directory: nodejs-mobile
+        run: |
+          python -m pip install setuptools
+          ./tools/ios_framework_prepare.sh ${{ matrix.target }}
+          ls -R out_ios_${{ matrix.target }} | head -40
+      - uses: actions/upload-artifact@v4
+        with:
+          name: framework-${{ matrix.target }}
+          path: nodejs-mobile/out_ios_${{ matrix.target }}
+
+  publish:
+    needs: build
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: parts
+      - name: Create NodeMobile.xcframework
+        run: |
+          DEV=$(find parts/framework-arm64 -path '*Release-iphoneos/NodeMobile.framework' -type d | head -1)
+          SIM=$(find parts/framework-arm64-simulator -path '*Release-iphonesimulator/NodeMobile.framework' -type d | head -1)
+          echo "device: $DEV"; echo "simulator: $SIM"
+          xcodebuild -create-xcframework -framework "$DEV" -framework "$SIM" -output NodeMobile.xcframework
+          ZIP=nodejs-mobile-v18.20.4-small-icu-ios.zip
+          ditto -c -k --keepParent NodeMobile.xcframework "$ZIP"
+          shasum -a 256 "$ZIP" | tee "$ZIP.sha256"
+          echo "ZIP=$ZIP" >> "$GITHUB_ENV"
+      - name: Publish release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=nodejs-mobile-v18.20.4-small-icu
+          NOTES="nodejs-mobile v18.20.4 for iOS (arm64 device + arm64 simulator), built with --with-intl=small-icu by tools/nodejs-mobile/patch-icu.sh. SHA-256: $(cut -d' ' -f1 "$ZIP.sha256")"
+          if gh release view "$TAG" -R "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ZIP" "$ZIP.sha256" --clobber -R "${{ github.repository }}"
+          else
+            gh release create "$TAG" "$ZIP" "$ZIP.sha256" --title "$TAG" --notes "$NOTES" -R "${{ github.repository }}"
+          fi
