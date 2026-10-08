@@ -14,7 +14,7 @@ if [ "${UPSTREAM:-0}" = "1" ]; then
 else
   NAME="nodejs-mobile-${VERSION}-small-icu-ios.zip"
   URL="https://github.com/Everaldtah/termforge/releases/download/nodejs-mobile-${VERSION}-small-icu/${NAME}"
-  SHA256="PENDING_FIRST_BUILD"
+  SHA256="f9013aa50f1779492429cb385ac90e0d5a913b131e6b305b545b117f6f83c57f"
   TAG="${VERSION}-small-icu"
 fi
 APP_MIN_IOS="17.0"

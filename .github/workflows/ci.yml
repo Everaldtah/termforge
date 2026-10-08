@@ -62,8 +62,7 @@ jobs:
       - name: Generate project
         run: |
           chmod +x scripts/*.sh
-          # UPSTREAM=1 until build-nodejs-mobile.yml has published the ICU build (then drop it)
-          UPSTREAM=1 scripts/fetch-nodejs-mobile.sh
+          scripts/fetch-nodejs-mobile.sh
           scripts/fetch-ish.sh
           xcodegen generate
       - name: Pick a simulator
