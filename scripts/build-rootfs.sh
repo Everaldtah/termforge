@@ -109,7 +109,9 @@ impossible    x86_64-only packages           the emulator is 32-bit x86 (Alpine 
 EOF
 
 echo "packing $OUT"
+# No device nodes in the image: iSH creates /dev/* itself at boot, and nodes imported
+# through fakefs keep the build host's dev_t encoding, which is wrong on iOS.
 $AS_ROOT tar -C "$ROOTFS" --numeric-owner --owner=0 --group=0 --sort=name --mtime="@$SOURCE_DATE_EPOCH" \
-  -cf - . | gzip -n -9 > "$OUT"
+  --exclude='./dev/*' -cf - . | gzip -n -9 > "$OUT"
 sha256sum "$OUT" | tee "$OUT.sha256"
 du -h "$OUT" | cut -f1
