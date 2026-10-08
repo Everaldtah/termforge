@@ -1,0 +1,59 @@
+# Builds the Alpine x86 root filesystem for the Linux tab (scripts/build-rootfs.sh) on a
+# Linux runner as root, checks it boots under iSH built for the host, and publishes it as
+# a release asset. Manual only: the pins inside the script decide what gets built.
+name: Build Alpine rootfs
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish as release asset (alpine-x86 tag)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  rootfs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build (as root, reproducible mtimes)
+        run: |
+          sudo env SOURCE_DATE_EPOCH=1700000000 scripts/build-rootfs.sh --out "$RUNNER_TEMP/alpine-x86.tar.gz"
+          sudo chown "$USER" "$RUNNER_TEMP"/alpine-x86.tar.gz*
+          ls -la "$RUNNER_TEMP"/alpine-x86.tar.gz*
+      - name: Build iSH for the host (boot check)
+        run: |
+          sudo apt-get install -y -qq meson ninja-build libsqlite3-dev libarchive-dev clang > /dev/null
+          git clone -q --depth 1 https://github.com/ish-app/ish "$RUNNER_TEMP/ish"
+          cd "$RUNNER_TEMP/ish" && CC=clang meson setup build > /dev/null && ninja -C build > /dev/null
+          ./build/tools/fakefsify "$RUNNER_TEMP/alpine-x86.tar.gz" "$RUNNER_TEMP/fs"
+      - name: Boot check under iSH
+        run: |
+          cd "$RUNNER_TEMP/ish"
+          run() { timeout 120 ./build/ish -f "$RUNNER_TEMP/fs" "$@"; }
+          run /bin/bash -c 'echo "bash $BASH_VERSION"'
+          run /usr/bin/python3 -c 'print("python3 ok")'
+          run /usr/bin/git --version
+          run /usr/bin/rg --version | head -1
+          run /bin/bash -c 'cd /root && mkdir r && cd r && git init -q && git config user.email a@b && git config user.name a && echo hi > f && git add f && git commit -qm first && git log --oneline && rg -n hi'
+          run /bin/cat /etc/termforge-release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: alpine-x86-rootfs
+          path: ${{ runner.temp }}/alpine-x86.tar.gz*
+      - name: Publish release asset
+        if: ${{ inputs.publish }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=rootfs-alpine-x86
+          NOTES="Alpine x86 rootfs for TermForge's Linux tab, built by scripts/build-rootfs.sh. $(cat "$RUNNER_TEMP/alpine-x86.tar.gz.sha256")"
+          if gh release view "$TAG" -R "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$RUNNER_TEMP"/alpine-x86.tar.gz* --clobber -R "${{ github.repository }}"
+          else
+            gh release create "$TAG" "$RUNNER_TEMP"/alpine-x86.tar.gz* --title "$TAG" --notes "$NOTES" -R "${{ github.repository }}"
+          fi
