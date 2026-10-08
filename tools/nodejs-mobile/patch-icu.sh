@@ -18,12 +18,14 @@ PY=$(command -v python3 || command -v python)
 
 # perl, not sed: the same edits must work with BSD sed on macOS and GNU sed elsewhere.
 
-# 1. small-icu, and link its libraries into NodeMobile.framework (bin/ is already a search path)
+# 1. small-icu, and link its libraries into NodeMobile.framework (bin/ is already a search path).
+#    small-icu links the stub data (icudt74_dat) and installs the trimmed data at runtime,
+#    so libicustubdata.a is needed as well as libicudata.a.
 grep -q -- '--with-intl=none' "$PREP" || { echo "unexpected $PREP (no --with-intl=none)" >&2; exit 1; }
 perl -pi -e 's/--with-intl=none/--with-intl=small-icu/g' "$PREP"
-perl -pi -e 's/^(\s*)"libzlib\.a"\n/$1"libzlib.a"\n$1"libicudata.a"\n$1"libicui18n.a"\n$1"libicuucx.a"\n/' "$PREP"
+perl -pi -e 's/^(\s*)"libzlib\.a"\n/$1"libzlib.a"\n$1"libicudata.a"\n$1"libicui18n.a"\n$1"libicustubdata.a"\n$1"libicuucx.a"\n/' "$PREP"
 grep -q '"libicuucx.a"' "$PREP" || { echo "could not add ICU libs to outputs list" >&2; exit 1; }
-perl -pi -e 's/^(\t*)"-lstdc\+\+",\n/$1"-lstdc++",\n$1"-licudata",\n$1"-licui18n",\n$1"-licuucx",\n/' "$PBX"
+perl -pi -e 's/^(\t*)"-lstdc\+\+",\n/$1"-lstdc++",\n$1"-licudata",\n$1"-licui18n",\n$1"-licustubdata",\n$1"-licuucx",\n/' "$PBX"
 [ "$(grep -c '"-licuucx",' "$PBX")" = "2" ] || { echo "could not add ICU libs to OTHER_LDFLAGS (Debug + Release)" >&2; exit 1; }
 
 # 2. keep brkitr (rules + root/en resources) and the dictionaries in the trimmed data

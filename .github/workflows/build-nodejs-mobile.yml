@@ -47,6 +47,20 @@ jobs:
           sudo xcode-select -s "$X/Contents/Developer"
           xcodebuild -version
           sysctl -n hw.ncpu hw.memsize
+      - name: Free disk space (the first run died with "No space left on device" at libv8_initializers.a)
+        run: |
+          df -h / | tail -1
+          sudo rm -rf /Library/Frameworks/Mono.framework /Library/Frameworks/Xamarin.iOS.framework \
+            /Library/Frameworks/Xamarin.Android.framework /Users/runner/Library/Android /usr/local/share/powershell \
+            /Users/runner/.dotnet /usr/local/share/dotnet /opt/homebrew/share/powershell 2>/dev/null || true
+          KEEP=$(readlink -f /Applications/Xcode.app 2>/dev/null || true)
+          for X in /Applications/Xcode_*.app; do
+            case "$X" in *Xcode_${{ inputs.xcode }}*) continue;; esac
+            [ "$(readlink -f "$X")" = "$KEEP" ] && continue
+            sudo rm -rf "$X" || true
+          done
+          sudo rm -rf /Library/Developer/CoreSimulator/Caches 2>/dev/null || true
+          df -h / | tail -1
       - name: Patch for ICU
         run: tools/nodejs-mobile/patch-icu.sh nodejs-mobile
       - name: Build
