@@ -15,7 +15,8 @@ let package = Package(
             name: "LinuxCore",
             dependencies: ["iSHCore"],
             path: "Sources/LinuxCore",
-            linkerSettings: [.linkedLibrary("sqlite3")]
+            // iSH needs sqlite3; its vendored libarchive needs bz2, iconv and zlib from the system
+            linkerSettings: [.linkedLibrary("sqlite3"), .linkedLibrary("bz2"), .linkedLibrary("iconv"), .linkedLibrary("z")]
         ),
     ]
 )

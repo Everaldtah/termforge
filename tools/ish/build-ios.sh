@@ -93,6 +93,9 @@ cat > "$HDRS/module.modulemap" <<'EOF'
 module iSHCore {
     header "tf_ish.h"
     link "sqlite3"
+    link "bz2"
+    link "iconv"
+    link "z"
     export *
 }
 EOF
