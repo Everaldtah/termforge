@@ -73,11 +73,20 @@ final class TermForgeUITests: XCTestCase {
         XCTAssertTrue(scratch.waitForExistence(timeout: 10))
         scratch.tap()
 
+        // the unit tests may already have installed it into this simulator: then the tab
+        // starts Claude Code directly instead of showing the install card
         let install = app.buttons["install.button"]
-        XCTAssertTrue(install.waitForExistence(timeout: 20), "Claude tab should offer an install")
-        install.tap()
-
         let started = Date()
+        let decide = Date().addingTimeInterval(30)
+        while Date() < decide {
+            if install.exists {
+                install.tap()
+                break
+            }
+            if screenText().contains("Claude Code") { break }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        }
+
         let deadline = started.addingTimeInterval(300)
         var seen = ""
         while Date() < deadline {
@@ -86,7 +95,7 @@ final class TermForgeUITests: XCTestCase {
             RunLoop.current.run(until: Date().addingTimeInterval(0.5))
         }
         XCTAssertTrue(seen.contains("Claude Code") || seen.contains("Choose the text style"),
-                      "Claude Code did not render its first screen; screen:\n\(seen)")
+                      "Claude Code did not render its first screen; screen:\n\(seen)\nUI:\n\(app.debugDescription)")
         print(String(format: "METRIC uitest.installTapToClaudeScreen %.0f ms", Date().timeIntervalSince(started) * 1000))
         let shot = XCTAttachment(screenshot: app.screenshot())
         shot.name = "claude-code-first-screen"
