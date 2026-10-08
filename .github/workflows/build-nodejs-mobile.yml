@@ -83,8 +83,10 @@ jobs:
           path: parts
       - name: Create NodeMobile.xcframework
         run: |
-          DEV=$(find parts/framework-arm64 -path '*Release-iphoneos/NodeMobile.framework' -type d | head -1)
-          SIM=$(find parts/framework-arm64-simulator -path '*Release-iphonesimulator/NodeMobile.framework' -type d | head -1)
+          # (skip the EagerLinkingTBDs stubs: they have no binary)
+          DEV=$(find parts/framework-arm64 -path '*Release-iphoneos/NodeMobile.framework' -not -path '*EagerLinkingTBDs*' -type d | head -1)
+          SIM=$(find parts/framework-arm64-simulator -path '*Release-iphonesimulator/NodeMobile.framework' -not -path '*EagerLinkingTBDs*' -type d | head -1)
+          test -f "$DEV/NodeMobile" && test -f "$SIM/NodeMobile"
           echo "device: $DEV"; echo "simulator: $SIM"
           xcodebuild -create-xcframework -framework "$DEV" -framework "$SIM" -output NodeMobile.xcframework
           ZIP=nodejs-mobile-v18.20.4-small-icu-ios.zip
