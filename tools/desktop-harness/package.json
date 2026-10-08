@@ -1,0 +1,9 @@
+{
+  "name": "termforge-desktop-harness",
+  "private": true,
+  "description": "Runs nodejs-project/main.js on a desktop Node the way the iOS app does, renders sessions with a headless xterm and measures timings.",
+  "type": "module",
+  "devDependencies": {
+    "@xterm/headless": "5.5.0"
+  }
+}
