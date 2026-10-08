@@ -28,6 +28,10 @@
 #define TF_ISH_VERSION "ish (unknown commit)"
 #endif
 
+// iSH copies the host's node name into a 65-byte uname field; a Mac's hostname (the
+// simulator's) can be longer and __strcpy_chk aborts. The override is iSH's own hook.
+extern const char *uname_hostname_override;
+
 static tf_ish_callbacks g_cb;
 static bool g_booted;
 // Serialises every entry into the kernel from host threads: iSH's app only ever
@@ -166,6 +170,7 @@ int tf_ish_boot(const char *fakefs_dir, const char *host_dir, const char *mount_
         return -EALREADY;
     }
     g_cb = callbacks;
+    uname_hostname_override = "termforge";
 
     char data_dir[4096];
     snprintf(data_dir, sizeof data_dir, "%s/data", fakefs_dir);
