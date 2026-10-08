@@ -47,6 +47,7 @@ struct RuntimeStatusView: View {
             }
         }
         .padding()
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("runtime.status")
     }
 }

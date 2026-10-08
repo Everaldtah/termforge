@@ -16,6 +16,7 @@ struct InstallCard: View {
         .padding()
         .frame(maxWidth: 520)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("install.card")
     }
 }
