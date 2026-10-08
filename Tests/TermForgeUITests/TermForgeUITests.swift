@@ -63,6 +63,36 @@ final class TermForgeUITests: XCTestCase {
         waitForScreen(containing: "afterresume")
     }
 
+    /// Opens a Linux tab, installs the Alpine root if needed (download + import), and runs
+    /// python3 in the shell. Needs network on first run; reports the time to the prompt.
+    func testLinuxShellTab() {
+        XCTAssertTrue(app.descendants(matching: .any)["tab.repl"].waitForExistence(timeout: 60))
+        app.buttons["tabs.new"].tap()
+        app.buttons["new.linux"].tap()
+        let started = Date()
+        let install = app.buttons["linux.install.button"]
+        let decide = Date().addingTimeInterval(30)
+        while Date() < decide {
+            if install.exists {
+                install.tap()
+                break
+            }
+            if screenText().contains("#") { break }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        }
+        // bash's prompt in the root (root@termforge:...# or bash-5.2#)
+        waitForScreen(containing: "#", timeout: 600)
+        print(String(format: "METRIC uitest.linuxTabToPrompt %.0f ms", Date().timeIntervalSince(started) * 1000))
+        type("python3 -c 'print(6*7)'")
+        waitForScreen(containing: "42", timeout: 120)
+        type("ls /mnt/termforge")
+        waitForScreen(containing: "Projects", timeout: 60)
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "linux-shell"
+        shot.lifetime = .keepAlways
+        add(shot)
+    }
+
     /// Installs the pinned Claude Code from registry.npmjs.org inside the simulator and checks
     /// that its first screen renders. Needs network; reports the time to that screen.
     func testInstallAndStartClaudeCode() throws {

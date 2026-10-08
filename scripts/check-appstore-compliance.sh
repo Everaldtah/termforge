@@ -28,6 +28,10 @@ fi
 echo "== Private frameworks"
 if otool -L "$EXE" | grep -q '/PrivateFrameworks/'; then echo "VIOLATION: links a private framework"; otool -L "$EXE"; FAIL=1; else echo "ok: public frameworks only"; fi
 
+echo "== iSHCore (statically linked into the app: its imports are the app's)"
+HITS="$(nm -u "$EXE" | grep -E '_(ptrace|mach_vm_protect|vm_protect|mprotect|task_for_pid)$' || true)"
+if [ -n "$HITS" ]; then echo "note: memory/ptrace imports (iSH uses mprotect for the emulated address space; no JIT):"; echo "$HITS"; else echo "ok: none"; fi
+
 if [ -f "$NODE" ]; then
   echo "== NodeMobile.framework (report only)"
   echo "process-creation symbols imported by libuv (never called: every session's child_process is the shim):"
