@@ -1,16 +1,22 @@
 'use strict';
 // Test double for the Swift side: starts nodejs-project/main.js in a child Node process,
-// accepts its control connection over TCP and speaks the frame protocol.
+// accepts its control connection over TCP and speaks the frame protocol. Exec requests
+// (the Linux tier) run as real processes on this machine, so the protocol can be tested
+// end to end without iOS.
 
 const { spawn } = require('child_process');
 const EventEmitter = require('events');
 const net = require('net');
+const os = require('os');
 const path = require('path');
 const { T, encode, Decoder, json } = require('../nodejs-project/lib/frame');
+const { toHostPath } = require('../nodejs-project/lib/linux-tier');
 
 class Host extends EventEmitter {
-  static async start({ node = process.execPath, nodeArgs = ['--jitless'], dataDir, env = {} } = {}) {
+  static async start({ node = process.execPath, nodeArgs = ['--jitless'], dataDir, env = {}, linux = false } = {}) {
     const host = new Host();
+    host.linux = linux;
+    host.hostHome = env.HOME || process.env.HOME || os.homedir();
     const server = net.createServer();
     await new Promise((r) => server.listen(0, '127.0.0.1', r));
     const { port } = server.address();
@@ -29,6 +35,7 @@ class Host extends EventEmitter {
     });
     host.hello = await new Promise((r) => host.once('hello', r));
     host.helloMs = Number(process.hrtime.bigint() - started) / 1e6;
+    if (linux) host.setLinuxAvailable(true);
     return host;
   }
 
@@ -37,6 +44,8 @@ class Host extends EventEmitter {
     this.nextId = 1;
     this.pending = new Map();
     this.out = new Map(); // channel -> Buffer[]
+    this.execs = new Map(); // exec channel -> child
+    this.execLog = [];
   }
 
   _frame({ type, channel, payload }) {
@@ -62,6 +71,16 @@ class Host extends EventEmitter {
         }
         break;
       }
+      case T.REQUEST:
+        this._nodeRequest(json(payload));
+        break;
+      case T.EXEC_IN: {
+        const child = this.execs.get(channel);
+        if (!child || !child.stdin) break;
+        if (payload.length === 0) child.stdin.end();
+        else child.stdin.write(Buffer.from(payload));
+        break;
+      }
       case T.EVENT:
         this.emit('event', channel, json(payload));
         break;
@@ -71,6 +90,49 @@ class Host extends EventEmitter {
       default:
         break;
     }
+  }
+
+  // Node asked us to do something (exec on the "Linux layer" = this machine).
+  _nodeRequest(req) {
+    const respond = (ok, body) => this.sock.write(encode(T.RESPONSE, 0, { id: req.id, ok, ...(ok ? { result: body } : { error: body }) }));
+    if (req.op === 'exec') {
+      this.execLog.push(req);
+      const [file, ...args] = req.argv;
+      const program = file.startsWith('/') ? path.posix.basename(file) : file;
+      const cwd = toHostPath(req.cwd, this.hostHome);
+      const env = { ...process.env, ...req.env, HOME: this.hostHome, PATH: process.env.PATH };
+      let child;
+      try {
+        child = spawn(program, args, { cwd, env, stdio: ['pipe', 'pipe', 'pipe'] });
+      } catch (err) {
+        return respond(false, err.message);
+      }
+      this.execs.set(req.channel, child);
+      child.on('error', (err) => {
+        this.execs.delete(req.channel);
+        this.sock.write(encode(T.EXEC_EXIT, req.channel, { code: 127, error: `${err.code}: ${program}` }));
+      });
+      child.stdout.on('data', (d) => this.sock.write(encode(T.EXEC_OUT, req.channel, Buffer.concat([Buffer.from([1]), d]))));
+      child.stderr.on('data', (d) => this.sock.write(encode(T.EXEC_OUT, req.channel, Buffer.concat([Buffer.from([2]), d]))));
+      child.on('close', (code, signal) => {
+        if (!this.execs.has(req.channel)) return;
+        this.execs.delete(req.channel);
+        this.sock.write(encode(T.EXEC_EXIT, req.channel, { code: signal ? 128 + (os.constants.signals[signal] || 0) : code, signal }));
+      });
+      respond(true, { pid: child.pid || 0 });
+      return;
+    }
+    if (req.op === 'exec-kill') {
+      const child = this.execs.get(req.channel);
+      if (child) child.kill(req.signal);
+      return respond(true, {});
+    }
+    respond(false, `unknown op ${req.op}`);
+  }
+
+  setLinuxAvailable(available) {
+    this.linux = available;
+    this.sock.write(encode(T.EVENT, 0, { event: 'linux', available }));
   }
 
   request(op, extra = {}) {

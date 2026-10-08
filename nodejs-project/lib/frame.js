@@ -18,7 +18,14 @@ const T = Object.freeze({
   RESPONSE: 0x09, // node -> swift, ch 0, JSON {id, ok, result | error}
   EVENT: 0x0a,    // node -> swift, JSON {event, ...}
   LOG: 0x0b,      // node -> swift, utf-8 text
+  // exec (child_process routed to the host's Linux layer); channel = exec id >= EXEC_CHANNEL_BASE
+  EXEC_IN: 0x0c,  // node -> swift, stdin bytes; empty payload = EOF
+  EXEC_OUT: 0x0d, // swift -> node, u8 fd (1|2) | bytes
+  EXEC_EXIT: 0x0e, // swift -> node, JSON {code, signal, error}
 });
+
+// Exec ids never collide with session channels (which count up from 1).
+const EXEC_CHANNEL_BASE = 0x40000000;
 
 function encode(type, channel, payload) {
   let body;
@@ -81,4 +88,4 @@ function json(payload) {
   return JSON.parse(payload.toString('utf8'));
 }
 
-module.exports = { T, HEADER, MAX_PAYLOAD, encode, Decoder, json };
+module.exports = { T, HEADER, MAX_PAYLOAD, EXEC_CHANNEL_BASE, encode, Decoder, json };

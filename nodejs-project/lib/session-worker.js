@@ -6,11 +6,13 @@
 // (nodejs-mobile can start Node once per app process).
 
 const { parentPort, workerData } = require('worker_threads');
+const os = require('os');
 const path = require('path');
 const { pathToFileURL } = require('url');
 const { VirtualTerminal } = require('./vtty');
 const shim = require('./child-process-shim');
 const virtualCwd = require('./virtual-cwd');
+const { LinuxTier } = require('./linux-tier');
 
 const spec = workerData;
 const t0 = Date.now();
@@ -82,9 +84,15 @@ if (spec.platform) Object.defineProperty(process, 'platform', { configurable: tr
 virtualCwd.install(spec.cwd || process.cwd());
 process.on('exit', flush);
 
-// ---- child_process
+// ---- child_process: host URL opener first, then the Linux layer (when the app has booted it)
+const tiers = [shim.urlOpenTier((url) => parentPort.postMessage({ t: 'open-url', url }))];
+if (spec.execPort) {
+  const linux = new LinuxTier({ port: spec.execPort, hostHome: os.homedir(), available: !!spec.linuxAvailable });
+  spec.execPort.unref();
+  tiers.push(linux);
+}
 const router = new shim.ExecRouter({
-  tiers: [shim.urlOpenTier((url) => parentPort.postMessage({ t: 'open-url', url }))],
+  tiers,
   onExec: (record) => parentPort.postMessage({ t: 'exec', record }),
 });
 shim.install(router);
