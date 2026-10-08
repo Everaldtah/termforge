@@ -15,11 +15,16 @@ public enum FrameType: UInt8, Sendable {
     case response = 0x09
     case event = 0x0a
     case log = 0x0b
+    /// exec (child_process routed to the Linux layer); channel = exec id >= `Frame.execChannelBase`
+    case execIn = 0x0c     // node -> swift, stdin bytes; empty = EOF
+    case execOut = 0x0d    // swift -> node, u8 fd (1|2) | bytes
+    case execExit = 0x0e   // swift -> node, JSON {code, signal, error}
 }
 
 public struct Frame: Equatable, Sendable {
     public static let headerSize = 9
     public static let maxPayload = 64 * 1024 * 1024
+    public static let execChannelBase: UInt32 = 0x4000_0000
 
     public var type: FrameType
     public var channel: UInt32

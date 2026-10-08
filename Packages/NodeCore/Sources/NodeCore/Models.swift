@@ -136,6 +136,31 @@ public struct PingResult: Codable, Sendable, Equatable {
     public var now: Double
 }
 
+/// A child_process call from a Node session, already translated to guest paths and a
+/// guest environment by the session's Linux tier.
+public struct ExecRequest: Sendable, Equatable {
+    public var argv: [String]
+    public var cwd: String
+    public var env: [String: String]
+}
+
+/// What a running exec reports back to Node.
+public protocol ExecOutput: AnyObject, Sendable {
+    func stdout(_ data: Data)
+    func stderr(_ data: Data)
+    func exited(code: Int32, signal: String?)
+}
+
+/// Runs exec requests: the app wires the Linux layer in here. Called on the main actor;
+/// output may be reported from any thread.
+public protocol ExecBackend: AnyObject {
+    /// Start the program; returns a handle (pid or token) or throws. `output` outlives the call.
+    func start(_ request: ExecRequest, output: ExecOutput) throws -> Int32
+    func writeStdin(_ handle: Int32, _ data: Data)
+    func closeStdin(_ handle: Int32)
+    func kill(_ handle: Int32, signal: Int32)
+}
+
 public enum NodeRuntimeError: Error, LocalizedError, Equatable {
     case notReady
     case requestFailed(String)

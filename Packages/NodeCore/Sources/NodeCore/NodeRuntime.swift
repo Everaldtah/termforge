@@ -229,7 +229,11 @@ public final class NodeRuntime {
                 if let event = try? frame.decodeJSON(NodeEvent.self) { onEvent?(event) }
             case .data, .exit, .event:
                 sessions[frame.channel]?.deliver(frame)
-            case .open, .resize, .signal, .close, .request:
+            case .request:
+                handleNodeRequest(frame.payload)
+            case .execIn:
+                execInput(channel: frame.channel, bytes: frame.payload)
+            case .open, .resize, .signal, .close, .execOut, .execExit:
                 continue
             }
         }
@@ -248,6 +252,87 @@ public final class NodeRuntime {
         } else {
             cont.resume(throwing: NodeRuntimeError.requestFailed(obj["error"] as? String ?? "request failed"))
         }
+    }
+
+    // MARK: exec (Node's child_process -> the Linux layer)
+
+    /// The app sets this once the Linux layer has booted; nil means every command fails with ENOENT.
+    public var execBackend: ExecBackend? {
+        didSet { send(Frame(type: .event, channel: 0, payload: Array(#"{"event":"linux","available":\#(execBackend != nil)}"#.utf8))) }
+    }
+
+    private var execs: [UInt32: ExecRelay] = [:]
+
+    /// Collects output for one exec and streams it to Node as frames.
+    private final class ExecRelay: ExecOutput, @unchecked Sendable {
+        let channel: UInt32
+        weak var runtime: NodeRuntime?
+        var handle: Int32 = -1
+
+        init(channel: UInt32, runtime: NodeRuntime) {
+            self.channel = channel
+            self.runtime = runtime
+        }
+
+        func stdout(_ data: Data) { emit(fd: 1, data) }
+        func stderr(_ data: Data) { emit(fd: 2, data) }
+
+        private func emit(fd: UInt8, _ data: Data) {
+            runtime?.sendFromAnyThread(Frame(type: .execOut, channel: channel, payload: [fd] + Array(data)))
+        }
+
+        func exited(code: Int32, signal: String?) {
+            var body: [String: Any] = ["code": Int(code)]
+            if let signal { body["signal"] = signal }
+            let payload = (try? JSONSerialization.data(withJSONObject: body)).map(Array.init) ?? Array(#"{"code":1}"#.utf8)
+            runtime?.sendFromAnyThread(Frame(type: .execExit, channel: channel, payload: payload))
+            let channel = self.channel
+            DispatchQueue.main.async { MainActor.assumeIsolated { self.runtime?.execs[channel] = nil } }
+        }
+    }
+
+    nonisolated func sendFromAnyThread(_ frame: Frame) {
+        DispatchQueue.main.async { MainActor.assumeIsolated { self.send(frame) } }
+    }
+
+    private func handleNodeRequest(_ payload: [UInt8]) {
+        guard let obj = try? JSONSerialization.jsonObject(with: Data(payload)) as? [String: Any],
+              let id = obj["id"] as? Int, let op = obj["op"] as? String else { return }
+        func respond(_ result: [String: Any]?, error: String? = nil) {
+            var body: [String: Any] = ["id": id, "ok": error == nil]
+            if let result { body["result"] = result }
+            if let error { body["error"] = error }
+            if let data = try? JSONSerialization.data(withJSONObject: body) { send(Frame(type: .response, channel: 0, payload: Array(data))) }
+        }
+        switch op {
+        case "exec":
+            guard let backend = execBackend else { return respond(nil, error: "the Linux layer is not running") }
+            guard let channel = (obj["channel"] as? NSNumber)?.uint32Value, let argv = obj["argv"] as? [String], !argv.isEmpty else {
+                return respond(nil, error: "bad exec request")
+            }
+            let request = ExecRequest(argv: argv, cwd: obj["cwd"] as? String ?? "/", env: obj["env"] as? [String: String] ?? [:])
+            let relay = ExecRelay(channel: channel, runtime: self)
+            do {
+                let handle = try backend.start(request, output: relay)
+                relay.handle = handle
+                execs[channel] = relay
+                respond(["pid": Int(handle)])
+            } catch {
+                respond(nil, error: error.localizedDescription)
+            }
+        case "exec-kill":
+            if let channel = (obj["channel"] as? NSNumber)?.uint32Value, let relay = execs[channel] {
+                execBackend?.kill(relay.handle, signal: Int32((obj["signal"] as? NSNumber)?.intValue ?? 15))
+            }
+            respond([:])
+        default:
+            respond(nil, error: "unknown op \(op)")
+        }
+    }
+
+    private func execInput(channel: UInt32, bytes: [UInt8]) {
+        guard let relay = execs[channel], let backend = execBackend else { return }
+        if bytes.isEmpty { backend.closeStdin(relay.handle) } else { backend.writeStdin(relay.handle, Data(bytes)) }
     }
 
     private func stop(_ why: String) {
