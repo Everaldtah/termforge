@@ -95,22 +95,14 @@ public final class LinuxRuntime: @unchecked Sendable {
         return session
     }
 
-    /// Runs a program with piped stdio. `stdout`/`stderr` receive data as it arrives (on a
-    /// background queue) and `completion` the exit status. Feed stdin through the returned
-    /// handle; close it when done, or the program may wait for input forever.
+    /// Runs a program with piped stdio. `stdout`/`stderr` receive data as it arrives and
+    /// `completion` the exit status, all on one serial queue, in order: nothing arrives
+    /// after `completion`. Feed stdin through the returned handle; close it when done.
     public func exec(argv: [String], env: [String: String], cwd: String?,
                      stdout: @escaping (Data) -> Void, stderr: @escaping (Data) -> Void,
                      completion: @escaping (Int32) -> Void) throws -> LinuxExec {
         guard booted else { throw LinuxError.notBooted }
         let inPipe = Pipe(), outPipe = Pipe(), errPipe = Pipe()
-        outPipe.fileHandleForReading.readabilityHandler = { h in
-            let d = h.availableData
-            if d.isEmpty { h.readabilityHandler = nil } else { stdout(d) }
-        }
-        errPipe.fileHandleForReading.readabilityHandler = { h in
-            let d = h.availableData
-            if d.isEmpty { h.readabilityHandler = nil } else { stderr(d) }
-        }
         let pid = withCStringArray(argv) { argvPtr in
             withCStringArray(env.map { "\($0.key)=\($0.value)" }) { envPtr in
                 tf_ish_exec(argvPtr, envPtr, cwd, inPipe.fileHandleForReading.fileDescriptor,
@@ -125,15 +117,12 @@ public final class LinuxRuntime: @unchecked Sendable {
             try? inPipe.fileHandleForWriting.close()
             throw LinuxError.kernel(-pid, "exec \(argv.first ?? "")")
         }
-        // the Pipe objects must outlive this call: releasing them closes the read ends and
-        // the guest's next write dies with SIGPIPE (exit status 141)
-        let exec = LinuxExec(pid: pid, stdin: inPipe.fileHandleForWriting, keepAlive: [inPipe, outPipe, errPipe], runtime: self)
+        let exec = LinuxExec(pid: pid, stdin: inPipe, stdout: outPipe, stderr: errPipe, runtime: self,
+                             onStdout: stdout, onStderr: stderr, onExit: completion)
         lock.lock()
-        execs[pid] = { [exec] code in
-            exec.finishReading()
-            completion(code)
-        }
+        execs[pid] = { [exec] code in exec.finish(code: code) }
         lock.unlock()
+        exec.startReading()
         return exec
     }
 
@@ -162,52 +151,80 @@ public final class LinuxRuntime: @unchecked Sendable {
     }
 }
 
-/// A program started with `LinuxRuntime.exec`: its pid and the write end of its stdin.
+/// A program started with `LinuxRuntime.exec`: its pid, the write end of its stdin, and
+/// the readers that deliver stdout/stderr/exit in order on one serial queue.
 public final class LinuxExec: @unchecked Sendable {
     public let pid: Int32
-    private let stdin: FileHandle
-    private let keepAlive: [Pipe]
+    private let stdinPipe: Pipe
+    private let outPipe: Pipe
+    private let errPipe: Pipe
     private weak var runtime: LinuxRuntime?
+    private let onStdout: (Data) -> Void
+    private let onStderr: (Data) -> Void
+    private let onExit: (Int32) -> Void
+    private let events = DispatchQueue(label: "termforge.linux.exec")
     private let lock = NSLock()
     private var stdinOpen = true
+    private var finished = false
 
-    init(pid: Int32, stdin: FileHandle, keepAlive: [Pipe], runtime: LinuxRuntime) {
+    init(pid: Int32, stdin: Pipe, stdout: Pipe, stderr: Pipe, runtime: LinuxRuntime,
+         onStdout: @escaping (Data) -> Void, onStderr: @escaping (Data) -> Void, onExit: @escaping (Int32) -> Void) {
         self.pid = pid
-        self.stdin = stdin
-        self.keepAlive = keepAlive
+        self.stdinPipe = stdin
+        self.outPipe = stdout
+        self.errPipe = stderr
         self.runtime = runtime
+        self.onStdout = onStdout
+        self.onStderr = onStderr
+        self.onExit = onExit
     }
 
-    /// After exit: deliver what is still buffered in the pipes, then stop the readers.
-    func finishReading() {
-        for pipe in keepAlive.dropFirst() {
-            let h = pipe.fileHandleForReading
-            if let handler = h.readabilityHandler {
-                let rest = h.availableData
-                if !rest.isEmpty { handler(h) }
+    func startReading() {
+        for (pipe, deliver) in [(outPipe, onStdout), (errPipe, onStderr)] {
+            pipe.fileHandleForReading.readabilityHandler = { [weak self] h in
+                guard let self else { return }
+                // read and enqueue under the lock, so an exit that follows drains and
+                // closes after this chunk is already queued
+                self.lock.lock()
+                defer { self.lock.unlock() }
+                if self.finished { return }
+                let d = h.availableData
+                if d.isEmpty { h.readabilityHandler = nil } else { self.events.async { deliver(d) } }
             }
-            h.readabilityHandler = nil
         }
+    }
+
+    /// Called by the runtime when the guest process exits (any thread).
+    func finish(code: Int32) {
+        lock.lock()
+        finished = true
+        for (pipe, deliver) in [(outPipe, onStdout), (errPipe, onStderr)] {
+            let h = pipe.fileHandleForReading
+            h.readabilityHandler = nil
+            while let rest = try? h.read(upToCount: 1 << 16), !rest.isEmpty { events.async { deliver(rest) } }
+            try? h.close()
+        }
+        lock.unlock()
+        closeStdin()
+        events.async { self.onExit(code) }
     }
 
     public func writeStdin(_ data: Data) {
         lock.lock(); defer { lock.unlock() }
         guard stdinOpen, !data.isEmpty else { return }
-        try? stdin.write(contentsOf: data)
+        try? stdinPipe.fileHandleForWriting.write(contentsOf: data)
     }
 
     public func closeStdin() {
         lock.lock(); defer { lock.unlock() }
         guard stdinOpen else { return }
         stdinOpen = false
-        try? stdin.close()
+        try? stdinPipe.fileHandleForWriting.close()
     }
 
     public func kill(signal: Int32 = 15) {
         runtime?.kill(pid: pid, signal: signal)
     }
-
-    deinit { closeStdin() }
 }
 
 /// A process on a pseudo-terminal inside the Linux layer.
