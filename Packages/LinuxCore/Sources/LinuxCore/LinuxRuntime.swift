@@ -125,10 +125,16 @@ public final class LinuxRuntime: @unchecked Sendable {
             try? inPipe.fileHandleForWriting.close()
             throw LinuxError.kernel(-pid, "exec \(argv.first ?? "")")
         }
+        // the Pipe objects must outlive this call: releasing them closes the read ends and
+        // the guest's next write dies with SIGPIPE (exit status 141)
+        let exec = LinuxExec(pid: pid, stdin: inPipe.fileHandleForWriting, keepAlive: [inPipe, outPipe, errPipe], runtime: self)
         lock.lock()
-        execs[pid] = completion
+        execs[pid] = { [exec] code in
+            exec.finishReading()
+            completion(code)
+        }
         lock.unlock()
-        return LinuxExec(pid: pid, stdin: inPipe.fileHandleForWriting, runtime: self)
+        return exec
     }
 
     public func kill(pid: Int32, signal: Int32) {
@@ -160,14 +166,28 @@ public final class LinuxRuntime: @unchecked Sendable {
 public final class LinuxExec: @unchecked Sendable {
     public let pid: Int32
     private let stdin: FileHandle
+    private let keepAlive: [Pipe]
     private weak var runtime: LinuxRuntime?
     private let lock = NSLock()
     private var stdinOpen = true
 
-    init(pid: Int32, stdin: FileHandle, runtime: LinuxRuntime) {
+    init(pid: Int32, stdin: FileHandle, keepAlive: [Pipe], runtime: LinuxRuntime) {
         self.pid = pid
         self.stdin = stdin
+        self.keepAlive = keepAlive
         self.runtime = runtime
+    }
+
+    /// After exit: deliver what is still buffered in the pipes, then stop the readers.
+    func finishReading() {
+        for pipe in keepAlive.dropFirst() {
+            let h = pipe.fileHandleForReading
+            if let handler = h.readabilityHandler {
+                let rest = h.availableData
+                if !rest.isEmpty { handler(h) }
+            }
+            h.readabilityHandler = nil
+        }
     }
 
     public func writeStdin(_ data: Data) {
