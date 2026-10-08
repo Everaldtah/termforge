@@ -61,7 +61,7 @@ jobs:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
         run: |
-          python3 -m pip install -q pyjwt cryptography
+          python3 -m pip install -q --break-system-packages pyjwt cryptography
           python3 - <<'PY'
           import json, os, time, urllib.request, jwt
           key = open(os.environ['KEY_PATH']).read()
