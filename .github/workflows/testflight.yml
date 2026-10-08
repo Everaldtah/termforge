@@ -56,6 +56,29 @@ jobs:
           printf '%s\n' "$ASC_KEY_P8" > "$KEY_PATH"
           chmod 600 "$KEY_PATH"
 
+      - name: Revoke stale API-minted development certificates (Apple caps them; each runner mints its own)
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          python3 -m pip install -q pyjwt cryptography
+          python3 - <<'PY'
+          import json, os, time, urllib.request, jwt
+          key = open(os.environ['KEY_PATH']).read()
+          tok = jwt.encode({"iss": os.environ['ASC_ISSUER_ID'], "iat": int(time.time()), "exp": int(time.time()) + 600, "aud": "appstoreconnect-v1"}, key, algorithm="ES256", headers={"kid": os.environ['ASC_KEY_ID']})
+          def call(method, path):
+              req = urllib.request.Request("https://api.appstoreconnect.apple.com" + path, method=method, headers={"Authorization": "Bearer " + tok})
+              try:
+                  with urllib.request.urlopen(req) as r: return r.status, r.read()
+              except urllib.error.HTTPError as e: return e.code, e.read()
+          st, body = call("GET", "/v1/certificates?limit=200&filter%5BcertificateType%5D=DEVELOPMENT")
+          certs = [c for c in json.loads(body)["data"] if "Created via API" in (c["attributes"].get("name") or "")]
+          certs.sort(key=lambda c: c["attributes"].get("expirationDate", ""))
+          for c in certs[:-1]:
+              print("revoke", c["id"], call("DELETE", "/v1/certificates/" + c["id"])[0])
+          print("kept", [c["id"] for c in certs[-1:]])
+          PY
+
       - name: Archive (Release, signed automatically)
         run: |
           set -o pipefail
