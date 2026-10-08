@@ -41,10 +41,12 @@ node run-session.mjs --home /tmp/tf-home --install claude-code --kind claude --u
 | `App/` | SwiftUI app: tabs, settings, install card, quick actions, Keychain, web sign-in |
 | `Packages/NodeCore` | nodejs-mobile wrapper: runtime thread, socketpair control channel, sessions |
 | `Packages/TerminalUI` | SwiftTerm host view, extra-keys bar |
+| `Packages/LinuxCore` | iSH wrapper: boot, pty sessions, piped exec (`iSHCore.xcframework` from `build-ish.yml`) |
+| `tools/ish/` | the C shim over iSH's kernel, its Linux test harness, the iOS cross-build script |
 | `nodejs-project/` | runs inside Node: supervisor, virtual TTY, child_process shim, installer, pins |
 | `nodejs-tests/`, `Tests/` | Node tests, iOS unit + UI tests |
 | `tools/desktop-harness` | desktop stand-in for the app: boots the supervisor, renders a tab in a headless xterm |
-| `scripts/` | bootstrap, nodejs-mobile fetch, Claude Code vendoring report, App Store checks |
+| `scripts/` | bootstrap, framework fetches, Alpine rootfs builder, Claude Code vendoring report, App Store checks |
 | `docs/` | ARCHITECTURE, LIMITATIONS, PERFORMANCE, SIDELOAD |
 
 ## Licence
