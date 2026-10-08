@@ -1,0 +1,109 @@
+# Archive TermForge, sign it automatically with the App Store Connect API key and upload it
+# to TestFlight. Secrets: ASC_KEY_P8 (contents of AuthKey_XXXX.p8), ASC_KEY_ID, ASC_ISSUER_ID.
+# Needs the app record (bundle com.everaldtah.termforge) to exist in App Store Connect.
+name: TestFlight
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload:
+        description: "Upload to App Store Connect / TestFlight (false: archive only)"
+        type: boolean
+        default: true
+  push:
+    tags: ["v*"]
+
+concurrency: testflight
+
+jobs:
+  testflight:
+    runs-on: macos-15
+    timeout-minutes: 75
+    env:
+      TEAM_ID: BXQW8UBNM2
+      KEY_PATH: ${{ github.workspace }}/../asc/AuthKey.p8
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Xcode 26 (App Store Connect requires the iOS 26 SDK)
+        run: |
+          X=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$X" ]; then echo "no Xcode 26 on this image"; ls /Applications | grep -i xcode; exit 1; fi
+          sudo xcode-select -s "$X/Contents/Developer"
+          xcodebuild -version
+
+      - name: Cache vendored frameworks
+        uses: actions/cache@v4
+        with:
+          path: |
+            Packages/NodeCore/Vendor
+            Packages/LinuxCore/Vendor
+          key: vendor-${{ hashFiles('scripts/fetch-nodejs-mobile.sh', 'scripts/fetch-ish.sh') }}
+
+      - name: Generate the Xcode project
+        run: |
+          which xcodegen || brew install xcodegen
+          chmod +x scripts/*.sh
+          scripts/fetch-nodejs-mobile.sh
+          scripts/fetch-ish.sh
+          xcodegen generate
+
+      - name: App Store Connect key
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          mkdir -p "$(dirname "$KEY_PATH")"
+          printf '%s\n' "$ASC_KEY_P8" > "$KEY_PATH"
+          chmod 600 "$KEY_PATH"
+
+      - name: Archive (Release, signed automatically)
+        run: |
+          set -o pipefail
+          xcodebuild archive \
+            -project TermForge.xcodeproj -scheme TermForge -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/TermForge.xcarchive" \
+            -allowProvisioningUpdates -skipPackagePluginValidation -skipMacroValidation \
+            -authenticationKeyPath "$KEY_PATH" -authenticationKeyID "${{ secrets.ASC_KEY_ID }}" -authenticationKeyIssuerID "${{ secrets.ASC_ISSUER_ID }}" \
+            DEVELOPMENT_TEAM="$TEAM_ID" CODE_SIGN_STYLE=Automatic CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            2>&1 | tee "$RUNNER_TEMP/archive.log" | grep -E --line-buffered 'error:|warning: .*(sign|provision)|\*\* ARCHIVE|Signing Identity|Provisioning Profile' || true
+          test -d "$RUNNER_TEMP/TermForge.xcarchive" || { tail -80 "$RUNNER_TEMP/archive.log"; exit 1; }
+
+      - name: App Store static checks on the archived app
+        run: scripts/check-appstore-compliance.sh "$RUNNER_TEMP/TermForge.xcarchive/Products/Applications/TermForge.app"
+
+      - name: Upload to App Store Connect (TestFlight)
+        if: ${{ github.event_name == 'push' || inputs.upload }}
+        run: |
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>${TEAM_ID}</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>manageAppVersionAndBuildNumber</key><true/>
+            <key>uploadSymbols</key><true/>
+            <key>testFlightInternalTestingOnly</key><false/>
+          </dict></plist>
+          PLIST
+          set -o pipefail
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/TermForge.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$KEY_PATH" -authenticationKeyID "${{ secrets.ASC_KEY_ID }}" -authenticationKeyIssuerID "${{ secrets.ASC_ISSUER_ID }}" \
+            2>&1 | tee "$RUNNER_TEMP/export.log" | tail -40
+
+      - name: Logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcode-logs
+          path: |
+            ${{ runner.temp }}/archive.log
+            ${{ runner.temp }}/export.log
+          if-no-files-found: ignore
+
+      - name: Key off the machine
+        if: always()
+        run: rm -f "$KEY_PATH"
