@@ -181,6 +181,15 @@ int tf_ish_boot(const char *fakefs_dir, const char *host_dir, const char *mount_
     err = become_first_process();
     if (err < 0)
         goto out;
+    // Device nodes that came in with the rootfs carry the *host's* dev_t encoding (fakefs
+    // stores archive_entry_rdev raw; on Linux it happens to match the guest encoding, on
+    // Darwin it does not), so /dev/null would be ENXIO. Drop them; iSH recreates them.
+    static const char *const stale_nodes[] = {
+        "/dev/null", "/dev/zero", "/dev/full", "/dev/random", "/dev/urandom", "/dev/tty", "/dev/console",
+        "/dev/ptmx", "/dev/tty1", "/dev/tty2", "/dev/tty3", "/dev/tty4", "/dev/tty5", "/dev/tty6", "/dev/tty7",
+    };
+    for (size_t i = 0; i < sizeof(stale_nodes) / sizeof(stale_nodes[0]); i++)
+        generic_unlinkat(AT_PWD, stale_nodes[i]);
     create_some_device_nodes();
 
     do_mount(&procfs, "proc", "/proc", "", 0);
