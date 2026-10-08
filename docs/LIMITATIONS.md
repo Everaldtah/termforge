@@ -118,16 +118,26 @@ From code.claude.com/docs/en/legal-and-compliance, 2026-10-08:
   user-initiated and explained. Rejection is still a real possibility. The SIDELOAD build
   (SIDELOAD.md) exists for that case.
 
-## Linux layer (phase 2): licensing decision pending
+## Linux layer: iSH (GPL-3.0), measured on Linux only so far
 
-- The brief describes the emulator as "iSH-style … MIT". iSH is **GPL-3.0** with extra
-  iOS terms (LICENSE.md, LICENSE.IOS), and newer contributions are also GPL-2.0.
-  Embedding iSH makes TermForge a GPL-3.0 app.
-- Blink (jart/blink, ISC) is permissive and emulates x86-64, but it maps guest
-  `fork()` onto host `fork()`, which iOS forbids. Using it means reworking its process
-  model so that guests run as threads.
-- Neither emulator can run Docker. iSH emulates 32-bit x86, so x86_64-only packages
-  will not run on it.
+- The emulator is iSH (ish-app/ish @ 8334836): GPL-3.0 with LICENSE.IOS, which waives
+  the GPL-vs-App-Store conflict as long as the GPL is otherwise honoured. **TermForge is
+  therefore distributed under GPL-3.0**, with its source public (this repository). The
+  brief said "MIT"; Blink (ISC) was the alternative, but it maps guest `fork()` onto host
+  `fork()`, which iOS forbids. The decision was taken on 2026-10-08.
+- 32-bit x86 only: Alpine's `x86` repository. x86_64-only packages cannot run. No Docker,
+  no kernel namespaces, no inbound sockets (iOS), so no sshd.
+- Everything is interpreted. On a desktop x86_64 host: `git --version` 33 ms, `python3`
+  start 480 ms, `git init && commit` 0.7 s, `apk add jq` 12 s. An A15 will be slower;
+  no device numbers yet.
+- Verified under iSH on Linux with the shipped root: bash, coreutils, git, ripgrep,
+  python3 (ssl, sqlite3, subprocess), apk, gcc/build-base, ssh client. gcc needs `PATH`
+  set (the app always sets one). Untested: nodejs, rust, go, java.
+- Unprivileged-user-namespace builds of the rootfs (dev only) leave `etc/shadow` owned
+  by root:root; release images are built as real root in CI.
+- The in-app shell runs as root inside the emulator, like iSH. The host mount at
+  `/mnt/termforge` is the app's own Documents folder; nothing outside the sandbox is
+  reachable.
 
 ## FastPath (WKWebView JIT host): constraints found while planning
 

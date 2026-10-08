@@ -42,9 +42,28 @@ JIT-less interpreter on a desktop CPU. Not comparable to an A15 in absolute term
 Unit-test numbers come from `node --test nodejs-tests/` diagnostics; session numbers from
 `tools/desktop-harness/run-session.mjs --report`.
 
+## Linux layer on Linux x86_64 (iSH built natively, WSL; same code as iOS, different CPU)
+
+Measured with `tools/ish/test-linux.sh` and direct `ish` runs on the Alpine x86 root
+(2026-10-08). An A15 interprets x86 slower than a desktop x86_64 host runs it, so these
+are lower bounds for the device.
+
+| metric | value |
+|---|---|
+| kernel boot (mount root, /proc, /dev/pts, host mount, init) | 42–100 ms |
+| `bash -c echo` on a pty, open to exit | 70–135 ms |
+| `git --version` | 33 ms |
+| `rg --version` | 40 ms |
+| `python3 -c print(1)` | 480 ms |
+| `git init && git commit` | 736 ms |
+| piped exec `sh -c` with stdin/stdout/stderr | 22–26 ms |
+| `apk add jq` (network + install) | 12.3 s |
+| rootfs tar.gz → fakefs import (300 MB) | 1.5 s (fakefsify, desktop NVMe) |
+
 ## Not measured yet
 
 - Anything on a real iPhone or iPad.
 - SwiftTerm render latency, scrollback cost, 120 Hz behaviour.
 - Claude Code startup in the simulator with the ICU build of nodejs-mobile.
+- The Linux layer on iOS at all (simulator test exists; first run pending).
 - A prompt round trip through the API (needs credentials on the test device).
