@@ -39,9 +39,12 @@ final class SimulatorClaudeCodeTests: XCTestCase {
             guard e.event == "exec" else { return }
             execs.append("\(e.tier ?? "?"): " + ([e.file ?? ""] + (e.args ?? [])).joined(separator: " "))
         }
+        // Ink places text with cursor moves rather than spaces, so compare without whitespace
         let plainText = { Self.stripANSI(output) }
+        let squeezed = { plainText().filter { !$0.isWhitespace } }
+        let needles = Self.firstScreen.map { $0.filter { !$0.isWhitespace } }
         let until = Date().addingTimeInterval(90)
-        while Date() < until, exited == nil, !Self.firstScreen.contains(where: plainText().contains) {
+        while Date() < until, exited == nil, !needles.contains(where: squeezed().contains) {
             try await Task.sleep(nanoseconds: 20_000_000)
         }
         try await Task.sleep(nanoseconds: 300_000_000)
@@ -49,7 +52,7 @@ final class SimulatorClaudeCodeTests: XCTestCase {
         let plain = plainText()
         for line in plain.split(separator: "\n", omittingEmptySubsequences: false) { print("CLAUDE| \(line)") }
         for line in execs { print("EXEC| \(line)") }
-        let shown = Self.firstScreen.first(where: plain.contains)
+        let shown = needles.first(where: squeezed().contains)
         XCTAssertNotNil(shown, "Claude Code did not reach its first screen (exit: \(String(describing: exited))); see CLAUDE| lines")
         if shown != nil {
             print(String(format: "METRIC claude.openToFirstScreen %.0f ms", (CACurrentMediaTime() - session.openedAt) * 1000))

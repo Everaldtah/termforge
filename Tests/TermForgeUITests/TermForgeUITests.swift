@@ -120,11 +120,11 @@ final class TermForgeUITests: XCTestCase {
         let deadline = started.addingTimeInterval(300)
         var seen = ""
         while Date() < deadline {
-            seen = screenText()
-            if seen.contains("Welcome to Claude Code") || seen.contains("Choose the text style") { break }
+            seen = screenText().filter { !$0.isWhitespace }
+            if seen.contains("WelcometoClaudeCode") || seen.contains("Choosethetextstyle") { break }
             RunLoop.current.run(until: Date().addingTimeInterval(0.5))
         }
-        XCTAssertTrue(seen.contains("Claude Code") || seen.contains("Choose the text style"),
+        XCTAssertTrue(seen.contains("ClaudeCode") || seen.contains("Choosethetextstyle"),
                       "Claude Code did not render its first screen; screen:\n\(seen)\nUI:\n\(app.debugDescription)")
         print(String(format: "METRIC uitest.installTapToClaudeScreen %.0f ms", Date().timeIntervalSince(started) * 1000))
         let shot = XCTAttachment(screenshot: app.screenshot())

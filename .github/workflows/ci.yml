@@ -90,6 +90,37 @@ jobs:
             -skipPackagePluginValidation -skipMacroValidation \
             2>&1 | tee "$RUNNER_TEMP/test.log" | grep -E --line-buffered '^(Test (Case|Suite)|METRIC|CLAUDE\||EXEC\||LINUX\||.*error:|\*\* TEST)' || true
           grep -q '\*\* TEST SUCCEEDED \*\*' "$RUNNER_TEMP/test.log"
+      - name: Crash reports (simulator processes that died during the tests)
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/crashes"
+          find ~/Library/Logs/DiagnosticReports -maxdepth 1 \( -name 'TermForge*' -o -name 'xctest*' \) -newer TermForge.xcodeproj/project.pbxproj -exec cp {} "$RUNNER_TEMP/crashes/" \; 2>/dev/null || true
+          ls -la "$RUNNER_TEMP/crashes"
+          for f in "$RUNNER_TEMP"/crashes/*.ips; do
+            [ -f "$f" ] || continue
+            echo "=== $f"
+            python3 - "$f" <<'PY'
+          import json, sys
+          lines = open(sys.argv[1], encoding='utf-8', errors='replace').read().split('
+', 1)
+          hdr = json.loads(lines[0]); body = json.loads(lines[1]) if len(lines) > 1 else {}
+          print(hdr.get('app_name'), hdr.get('timestamp'))
+          print('exception:', body.get('exception'), 'termination:', body.get('termination'))
+          idx = body.get('faultingThread', 0)
+          imgs = body.get('usedImages', [])
+          thr = (body.get('threads') or [{}])[idx] if body.get('threads') else {}
+          print('faulting thread', idx, thr.get('name') or thr.get('queue'))
+          for fr in (thr.get('frames') or [])[:25]:
+              img = imgs[fr.get('imageIndex', 0)] if fr.get('imageIndex', 0) < len(imgs) else {}
+              print('  %-28s %s + %s' % (img.get('name', '?'), fr.get('symbol', '?'), fr.get('symbolLocation', fr.get('imageOffset'))))
+          PY
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: crash-reports
+          path: ${{ runner.temp }}/crashes
+          if-no-files-found: ignore
       - name: Metrics
         if: always()
         run: |
