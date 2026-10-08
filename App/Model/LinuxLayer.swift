@@ -23,7 +23,7 @@ final class LinuxLayer: ObservableObject {
     struct RootfsPin {
         let name = "alpine-x86"
         let url = URL(string: "https://github.com/Everaldtah/termforge/releases/download/rootfs-alpine-x86/alpine-x86.tar.gz")!
-        let sha256 = "1ddbf9a4d2bab4f5cc58c2f50b4162a8a4dc0c5878a649062e28295bffce74ad"
+        let sha256 = "8d7a36ce70500b7e9917c7e9adf2bced1b8b0c88053037018e069f3520c05a0c"
     }
 
     @Published private(set) var state: State = .notInstalled

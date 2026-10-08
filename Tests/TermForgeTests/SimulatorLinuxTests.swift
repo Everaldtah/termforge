@@ -8,7 +8,7 @@ import XCTest
 @MainActor
 final class SimulatorLinuxTests: XCTestCase {
     private static let pinURL = URL(string: "https://github.com/Everaldtah/termforge/releases/download/rootfs-alpine-x86/alpine-x86.tar.gz")!
-    private static let pinSHA = "1ddbf9a4d2bab4f5cc58c2f50b4162a8a4dc0c5878a649062e28295bffce74ad"
+    private static let pinSHA = "8d7a36ce70500b7e9917c7e9adf2bced1b8b0c88053037018e069f3520c05a0c"
 
     private func metric(_ name: String, _ ms: Double) {
         print(String(format: "METRIC %@ %.0f ms", name, ms))
