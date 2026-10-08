@@ -19,22 +19,59 @@ looked up, or whether it is still unverified.
   Claude-account sign-in. If that happens, these tabs stop working until a JavaScript
   build or a Node ≥ 22 iOS runtime exists. **This is the main risk to the whole app.**
 
+## Anthropic's terms for hosting Claude Code (looked up)
+
+From code.claude.com/docs/en/legal-and-compliance, 2026-10-08:
+
+- "The Claude Code binary must not be modified. Claude Code must be installed and run as
+  published by Anthropic, and customers may not remove, disable, or restrict any
+  authentication method built into it." TermForge unpacks the npm package complete and
+  byte-for-byte, keeps both API-key and Claude-account sign-in, and changes only the
+  environment (Node runtime, TTY, child_process, documented env vars).
+- "Each end user must authenticate with their own Anthropic API key, Claude subscription
+  plan credentials, or 3P inference provider credential." TermForge never supplies,
+  pools or proxies credentials.
+- Hosting is allowed: the terms don't "prevent an end user from signing in to the
+  unmodified Claude Code binary with their own Claude subscription, including where a
+  platform hosts Claude Code". Sign-in completes in Claude Code's own OAuth flow, and
+  TermForge code never reads the tokens.
+- Distributing TermForge to other people with Claude Code preinstalled or run in it
+  "requires agreeing to our Commercial Terms of Service". Running it on your own device is
+  your own use of Claude Code.
+- Naming: the product may say it "runs Claude Code" in plain text, but it may not use
+  "Claude Code" or "Anthropic" in its own name or logo.
+
+## nodejs-mobile has no ICU (measured)
+
+- Upstream nodejs-mobile builds with `--with-intl=none`, so V8 has no `Intl` object and
+  cannot parse `\p{...}` regular expressions. In the iOS simulator, Claude Code 2.1.112
+  fails to load: `SyntaxError: Invalid regular expression:
+  /^\p{Default_Ignorable_Code_Point}$/: Invalid property name`. The same error
+  reproduces on a Linux Node 18.20.4 built `--with-intl=none`.
+- Fix: rebuild nodejs-mobile with `small-icu` (`.github/workflows/build-nodejs-mobile.yml`).
+  Rewriting Claude Code's regular expressions would modify Claude Code, which the terms
+  above forbid, and without ICU there is no `Intl` either.
+
 ## No JIT (by design)
 
 - V8 runs with `--jitless`, which App Store rules require. Everything is interpreted.
 - jitless V8 has **no WebAssembly** (`--expose_wasm` is disabled). Claude Code 2.1.112
-  reaches its first screen without it (measured). Any npm tool that needs wasm will not
-  run in a Node tab.
+  reaches its first screen without it on desktop Node 18 `--jitless`. Any npm tool that
+  needs wasm will not run in a Node tab.
 - Startup cost: see PERFORMANCE.md. No device number exists yet.
 
-## Phase 1 scope (measured)
+## Phase 1 status (measured)
 
-- Claude Code starts, renders, takes keystrokes and can sign in or use an API key.
-  Every command it spawns fails with ENOENT because no execution tier exists yet. A
-  probe run spawned `which npm/bun/yarn/deno/pnpm/node` and `rg --files` (see the
-  vendoring report). The Bash, Grep, Glob and git-dependent features therefore do not
-  work until phase 3. Reading, writing and editing files work, because they go through
-  Node's `fs` in the shared home.
+- **iOS simulator:** the Node runtime, tabs, raw-mode TTY, REPL, rotation and
+  suspend/resume work (CI). Claude Code installs (complete package, about 0.6 s on CI's
+  network) but fails to load until the ICU build of nodejs-mobile is in place.
+- **Desktop stand-in** (Node 18.20.4 `--jitless` with full ICU, Linux): Claude Code
+  starts, renders, takes keystrokes and hands its sign-in URL to the host. Every command
+  it spawns fails with ENOENT because no execution tier exists yet. A probe run spawned
+  `which npm/bun/yarn/deno/pnpm/node` and `rg --files` (see the vendoring report). The
+  Bash, Grep, Glob and git-dependent features therefore do not work until phase 3.
+  Reading, writing and editing files work, because they go through Node's `fs` in the
+  shared home.
 - `child_process.fork()` fails with ENOSYS.
 - Native addons (`.node`) cannot load: iOS refuses unsigned dylibs.
 

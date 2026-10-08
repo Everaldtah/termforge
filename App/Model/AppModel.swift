@@ -106,7 +106,7 @@ final class AppModel: ObservableObject {
             do {
                 let result = try await runtime.install(package: "claude-code", pin: pin)
                 installProgress = nil
-                installMessage = "Installed \(result.version) in \(Int(result.ms)) ms (\(result.written) files; \(result.skipped.count) desktop-only native files skipped)"
+                installMessage = "Installed \(result.version) in \(Int(result.ms)) ms (\(result.written) files, unmodified)"
                 await refreshStatus()
                 for s in sessions where s.kind == .claude && !s.running { s.restart(apiKey: apiKey) }
             } catch {

@@ -81,17 +81,26 @@ its side.
 
 Claude Code is © Anthropic PBC and is not redistributed: it is not in this repository
 and not in the app binary. On first use, the device downloads the pinned tarball from
-`registry.npmjs.org` and checks the SHA-512 from `nodejs-project/pins.json`. It then
-unpacks only `cli.js`, `package.json`, `README.md`, `LICENSE.md` and `sdk-tools.d.ts`
-into `Application Support/TermForge/packages/claude-code/<version>`. The
-`.staging-* → rename` step makes the install atomic. Desktop-only native files
-(`vendor/ripgrep`, `vendor/seccomp`, `vendor/audio-capture`) are skipped and listed in the
-install manifest.
+`registry.npmjs.org`, checks the SHA-512 from `nodejs-project/pins.json`, and unpacks the
+**complete package, unmodified**, into
+`Application Support/TermForge/packages/claude-code/<version>`. The
+`.staging-* → rename` step makes the install atomic. Anthropic's terms for hosting
+Claude Code require it to be "installed and run as published", with none of its sign-in
+methods removed. So TermForge changes the environment Claude Code runs in (the Node
+runtime, the TTY, `child_process`, documented environment variables) and never touches
+its files. The desktop binaries under `vendor/` stay on disk and are never executed.
 
 **Version ceiling:** 2.1.112 (2026-04-16) is the last release published as a JavaScript
 bundle. From 2.1.113 on, the npm package installs a prebuilt native executable per
 desktop OS and declares Node ≥ 22, so there is nothing for nodejs-mobile (Node 18) to
 run. See LIMITATIONS.md.
+
+**ICU:** upstream nodejs-mobile is built `--with-intl=none`: no `Intl` object, and no
+Unicode property escapes in regular expressions. Claude Code 2.1.112 fails to load on it
+with `SyntaxError: Invalid regular expression: /^\p{Default_Ignorable_Code_Point}$/`
+(seen in the iOS simulator, and reproduced on a Linux Node 18.20.4 built
+`--with-intl=none`). `.github/workflows/build-nodejs-mobile.yml` rebuilds nodejs-mobile
+v18.20.4 with `small-icu` using `tools/nodejs-mobile/patch-icu.sh`.
 
 Claude Code tabs set `process.platform = "linux"` because their tools will run in the
 Linux layer. On Linux, Claude Code also keeps OAuth credentials in `~/.claude`, not in a

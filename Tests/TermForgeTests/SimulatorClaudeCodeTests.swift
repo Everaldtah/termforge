@@ -23,7 +23,7 @@ final class SimulatorClaudeCodeTests: XCTestCase {
             let result = try await runtime.install(package: "claude-code")
             print(String(format: "METRIC claude.install %.0f ms (node-side %.0f ms, %d files)",
                          (CACurrentMediaTime() - t0) * 1000, result.ms, result.written))
-            XCTAssertTrue(result.skipped.allSatisfy { $0.path.hasPrefix("vendor/") })
+            XCTAssertTrue(result.skipped.isEmpty, "the package must be installed complete and unmodified")
         }
 
         let project = FileManager.default.temporaryDirectory.appendingPathComponent("cc-\(UUID().uuidString)/project")

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Fetches the pinned Claude Code package exactly the way the app does on a device
-// (npm registry tarball + SHA-512 check + the same skip rules), writes it to an output
-// directory for inspection or simulator staging, and reports what cannot work on iOS.
+// (npm registry tarball + SHA-512 check, complete and unmodified), writes it to an output
+// directory for inspection, and reports what cannot work on iOS.
 //
 //   node scripts/vendor-claude-code.mjs [--out build/claude-code] [--probe-report run.json]
 //
@@ -28,16 +28,21 @@ const opt = (name, fallback) => {
 const out = path.resolve(opt('out', path.join(root, 'build', 'claude-code')));
 const probe = opt('probe-report', null);
 const pin = pins['claude-code'];
-const skip = Object.entries(pin.skip || {});
 
-const { dir, manifest } = await installer.installTarball({
-  pin,
-  destRoot: out,
-  accept: (rel) => {
-    const hit = skip.find(([prefix]) => rel.startsWith(prefix));
-    return hit ? hit[1] : true;
-  },
-});
+const { dir, manifest } = await installer.installTarball({ pin, destRoot: out });
+
+// Executables and addons built for desktop OSes, recognised by their magic bytes.
+function nativeKind(file) {
+  const fd = fs.openSync(file, 'r');
+  const head = Buffer.alloc(4);
+  fs.readSync(fd, head, 0, 4, 0);
+  fs.closeSync(fd);
+  const hex = head.toString('hex');
+  if (hex === '7f454c46') return 'ELF (Linux)';
+  if (['cffaedfe', 'feedfacf', 'cafebabe'].includes(hex)) return 'Mach-O (macOS)';
+  if (head.subarray(0, 2).toString('latin1') === 'MZ') return 'PE (Windows)';
+  return null;
+}
 const pkg = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
 
 const lines = [];
@@ -47,10 +52,13 @@ lines.push(`- Integrity: ${pin.integrity} (verified)`);
 lines.push(`- engines.node: ${pkg.engines && pkg.engines.node} (nodejs-mobile ships Node 18.20.4)`);
 lines.push(`- Entry: ${pin.entry}; license: ${pkg.license}`);
 lines.push(`- Unpacked to: ${dir}`, '');
-lines.push('## Kept', '');
-for (const f of manifest.written) lines.push(`- \`${f.path}\` (${(f.bytes / 1024).toFixed(0)} KiB)`);
-lines.push('', '## Skipped: cannot run without a real POSIX host', '');
-for (const f of manifest.skipped) lines.push(`- \`${f.path}\` (${((f.bytes || 0) / 1024).toFixed(0)} KiB): ${f.reason}`);
+const native = manifest.written.filter((f) => nativeKind(path.join(dir, f.path)));
+const runnable = manifest.written.filter((f) => !native.includes(f));
+lines.push(`Installed complete and unmodified: ${manifest.written.length} files, ${manifest.skipped.length} skipped.`);
+lines.push('', '## JavaScript and data (what runs)', '');
+for (const f of runnable) lines.push(`- \`${f.path}\` (${(f.bytes / 1024).toFixed(0)} KiB)`);
+lines.push('', '## Desktop binaries: kept on disk, never run (iOS cannot exec)', '');
+for (const f of native) lines.push(`- \`${f.path}\` (${(f.bytes / 1024).toFixed(0)} KiB): ${nativeKind(path.join(dir, f.path))}`);
 const optional = Object.keys(pkg.optionalDependencies || {});
 if (optional.length) {
   lines.push('', '## Optional native dependencies (never installed)', '');

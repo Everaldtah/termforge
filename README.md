@@ -4,10 +4,12 @@ A native iOS terminal that runs **Claude Code inside the app**. No SSH and no re
 machine. Node.js (nodejs-mobile, V8 without JIT) runs in-process, and every tab is a
 worker thread behind a virtual TTY rendered by SwiftTerm.
 
-> Status: **phase 1** (Claude Code in a terminal tab, API key or Claude-account
-> sign-in). Phases 2–4 (Linux layer, git/bash/rg for Claude Code, distro manager) and
-> the FastPath engine are not started. Read [docs/LIMITATIONS.md](docs/LIMITATIONS.md)
-> first: Claude Code is pinned to 2.1.112, the last release published as JavaScript.
+> Status: **phase 1, in progress.** The runtime, tabs, TTY, REPL, rotation and
+> suspend/resume pass in the iOS simulator. Claude Code installs there but cannot load
+> until nodejs-mobile is rebuilt with ICU (`build-nodejs-mobile.yml`); it already runs on
+> desktop Node 18 `--jitless`. Phases 2–4 and the FastPath engine are not started. Read
+> [docs/LIMITATIONS.md](docs/LIMITATIONS.md) first: Claude Code is pinned to 2.1.112, the
+> last release published as JavaScript, and Anthropic's hosting terms apply.
 
 ## Build (needs a Mac with Xcode 26)
 

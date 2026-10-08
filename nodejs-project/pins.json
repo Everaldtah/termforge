@@ -5,9 +5,6 @@
     "tarball": "https://registry.npmjs.org/@anthropic-ai/claude-code/-/claude-code-2.1.112.tgz",
     "integrity": "sha512-9FUgJ0EOvILyhIqxFKNVliebiUjL68dwpEW3eGSSe0vkVDJ1c5qMDNWc22gW3zkD7zRAqtfQPSGv0t4vMM2DPA==",
     "entry": "cli.js",
-    "skip": {
-      "vendor/": "prebuilt native executable or addon for desktop OSes; iOS cannot exec it"
-    },
-    "note": "2.1.112 is the last release published as a JavaScript bundle; 2.1.113+ ship only native binaries and need Node >= 22."
+    "note": "Unpacked complete and unmodified, as Anthropic's terms require for hosted Claude Code. Its desktop binaries under vendor/ stay on disk but never run (iOS cannot exec). 2.1.112 is the last release published as a JavaScript bundle; 2.1.113+ ship only native binaries and need Node >= 22."
   }
 }
