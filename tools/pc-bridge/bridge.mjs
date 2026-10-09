@@ -102,9 +102,27 @@ function sendJSON(res, status, obj) {
   res.end(JSON.stringify(obj));
 }
 
+// One-time pairing page: a 6-digit code printed at start opens a page whose button is the
+// termforge:// link, so the phone pairs from Safari without typing the token.
+const pairCode = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+const pairCodeExpires = Date.now() + 30 * 60 * 1000;
+let pairLink = '';
+
+function pairPage(ok) {
+  const body = ok
+    ? `<p>This phone can now run Claude Code on <b>${os.hostname()}</b>.</p><p><a class="b" href="${pairLink}">Open in TermForge</a></p><p class="s">If nothing opens, install TermForge first (TestFlight), then tap again.</p>`
+    : '<p>Wrong or expired code. Restart the bridge on the PC and use the code it prints.</p>';
+  return `<!doctype html><meta name=viewport content="width=device-width,initial-scale=1"><title>TermForge pairing</title><style>body{font:17px -apple-system,system-ui;margin:40px auto;max-width:420px;padding:0 20px;color:#eee;background:#141418}.b{display:inline-block;padding:14px 22px;border-radius:12px;background:#4f8cff;color:#fff;text-decoration:none;font-weight:600}.s{color:#999;font-size:14px}</style><h2>TermForge</h2>${body}`;
+}
+
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://x');
   if (url.pathname === '/health') return sendJSON(res, 200, { ok: true, name: os.hostname() });
+  if (url.pathname === '/pair') {
+    const ok = Date.now() < pairCodeExpires && (url.searchParams.get('code') || '') === pairCode;
+    res.writeHead(ok ? 200 : 403, { 'content-type': 'text/html; charset=utf-8' });
+    return res.end(pairPage(ok));
+  }
   if (!authorized(req)) return sendJSON(res, 401, { error: 'wrong or missing pairing token' });
   if (url.pathname === '/info') {
     return sendJSON(res, 200, { name: os.hostname(), platform: process.platform, claude: claudeVersion(), home: HOME, projects: projectFolders() });
@@ -203,6 +221,9 @@ server.listen(PORT, HOST, () => {
   const base = opt('url', ts ? `ws://${ts}:${port}` : `ws://${os.hostname()}:${port}`);
   const shown = flag('show-token');
   const link = `termforge://pair?url=${encodeURIComponent(base)}&token=${TOKEN}&name=${encodeURIComponent(os.hostname())}`;
+  pairLink = link;
+  const pageBase = base.replace(/^ws/, 'http');
+  console.log(`\nPair from the phone's browser (code valid 30 min): ${pageBase}/pair?code=${pairCode}`);
   console.log(`TermForge PC bridge on ${HOST}:${port}`);
   console.log(`  Claude Code: ${CLAUDE} (${claudeVersion()})`);
   console.log(`  shell:       ${SHELL}`);

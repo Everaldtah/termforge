@@ -46,6 +46,12 @@ test('bridge: token auth, /info, pty session over websocket, resize, exit', asyn
   });
 
   assert.strictEqual((await fetch(`${b.base}/health`)).status, 200);
+  // the one-time pairing page: wrong code refused, the printed code serves the termforge:// link
+  assert.strictEqual((await fetch(`${b.base}/pair?code=000000x`)).status, 403);
+  const code = /\/pair\?code=(\d{6})/.exec(b.out())[1];
+  const page = await fetch(`${b.base}/pair?code=${code}`);
+  assert.strictEqual(page.status, 200);
+  assert.ok((await page.text()).includes(`termforge://pair?url=`), 'pair page carries the link');
   assert.strictEqual((await fetch(`${b.base}/info`)).status, 401);
   assert.strictEqual((await fetch(`${b.base}/info?token=nope`)).status, 401);
   const info = await (await fetch(`${b.base}/info`, { headers: { authorization: `Bearer ${b.token}` } })).json();
