@@ -114,7 +114,7 @@ function sendJSON(res, status, obj) {
 // One-time pairing page: a 6-digit code printed at start opens a page whose button is the
 // termforge:// link, so the phone pairs from Safari without typing the token.
 const pairCode = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
-const pairCodeExpires = Date.now() + 30 * 60 * 1000;
+const pairCodeExpires = Date.now() + 24 * 60 * 60 * 1000;
 let pairLink = '';
 
 function pairPage(ok) {
@@ -232,7 +232,7 @@ server.listen(PORT, HOST, () => {
   const link = `termforge://pair?url=${encodeURIComponent(base)}&token=${TOKEN}&name=${encodeURIComponent(os.hostname())}`;
   pairLink = link;
   const pageBase = base.replace(/^ws/, 'http');
-  console.log(`\nPair from the phone's browser (code valid 30 min): ${pageBase}/pair?code=${pairCode}`);
+  console.log(`\nPair from the phone's browser (code valid 24 h): ${pageBase}/pair?code=${pairCode}`);
   console.log(`TermForge PC bridge on ${HOST}:${port}`);
   console.log(`  Claude Code: ${CLAUDE} (${claudeVersion()})`);
   console.log(`  shell:       ${SHELL}`);
