@@ -21,6 +21,15 @@ import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
+// npm sometimes installs node-pty's spawn helper without its execute bit (macOS/Linux):
+// every spawn then fails with "posix_spawnp failed", so restore it before loading the module.
+try {
+  const prebuilds = path.join(path.dirname(require.resolve('node-pty/package.json')), 'prebuilds');
+  for (const dir of fs.readdirSync(prebuilds)) {
+    const helper = path.join(prebuilds, dir, 'spawn-helper');
+    if (fs.existsSync(helper)) fs.chmodSync(helper, 0o755);
+  }
+} catch {}
 const pty = require('node-pty');
 const { WebSocketServer } = require('ws');
 

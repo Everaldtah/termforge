@@ -100,6 +100,8 @@ jobs:
         working-directory: tools/pc-bridge
         run: |
           npm ci --no-audit --no-fund
+          # npm drops the execute bit on node-pty's spawn helper -> "posix_spawnp failed"
+          chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true
           nohup node bridge.mjs --host 127.0.0.1 --port 7788 --shell /bin/bash --claude /bin/bash > "$RUNNER_TEMP/bridge.log" 2>&1 &
           sleep 4
           cat "$RUNNER_TEMP/bridge.log"
