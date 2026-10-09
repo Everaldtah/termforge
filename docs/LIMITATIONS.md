@@ -110,6 +110,17 @@ From code.claude.com/docs/en/legal-and-compliance, 2026-10-08:
   slash-command ecosystem, no session resume yet.
 - Prices shown by `/cost` are estimates from the usage block and a fixed price table;
   the API's invoice is the truth.
+- **The newest Claude Code in an emulated Linux VM (measured 2026-10-09, parked):** the
+  one way to run the published 2.1.295 binary unmodified on the subscription is a full
+  system emulator, and the iOS-legal one is QEMU's TCI interpreter (what UTM SE ships).
+  Measured on the PC with an Alpine aarch64 netboot VM, 2 vCPUs, 2 GB, the official
+  `linux-arm64-musl` binary and the user's own login — JIT QEMU → TCI: boot 42 → 195 s,
+  `claude -p` on Opus 5.5 13 → 130–141 s, on Fable 5.1 10.6 → 121 s. Turning JSC's
+  optimising tiers off inside the guest (`BUN_JSC_useDFGJIT=false BUN_JSC_useFTLJIT=false`)
+  gains ~10 %; `BUN_JSC_useJIT=false` is worse (202 s). Opus 5.5 and Fable 5.1 do answer
+  through it, so the route is real, but ~2 minutes per prompt is not a terminal anyone
+  would use; seeds termforge-81ba keeps the notes. User-mode emulators (Blink, QEMU-user)
+  are out because they need the host's `fork`, which iOS does not have.
 
 ## iOS process model
 
