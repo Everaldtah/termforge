@@ -157,6 +157,30 @@ final class AppModel: ObservableObject {
         hasAPIKey = false
     }
 
+    // MARK: PC bridge
+
+    @Published private(set) var pcPaired = PCBridgeSettings.isPaired
+
+    func pairPC(url: String, token: String, name: String?) {
+        guard !url.trimmingCharacters(in: .whitespaces).isEmpty, !token.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        PCBridgeSettings.pair(url: url, token: token, name: name)
+        pcPaired = true
+        restartWaiting(for: .pc)
+    }
+
+    func unpairPC() {
+        PCBridgeSettings.unpair()
+        pcPaired = false
+    }
+
+    /// termforge://pair?… links from the bridge's console, opened on the phone.
+    func handle(url: URL) {
+        if let p = PCBridgeSettings.parse(pairLink: url) {
+            pairPC(url: p.url, token: p.token, name: p.name)
+            if !sessions.contains(where: { $0.kind == .pc }) { newSession(kind: .pc) }
+        }
+    }
+
     // MARK: lifecycle
 
     func scenePhaseChanged(_ phase: ScenePhase) {

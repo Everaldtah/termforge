@@ -235,6 +235,27 @@ tab menu, `APIKeyCard` in a tab that has no key yet (saving the key restarts tho
 and a Settings section for the default model and effort (`AgentSettings`, passed as
 `TERMFORGE_AGENT_MODEL` / `TERMFORGE_AGENT_EFFORT`).
 
+## PC tab (Claude Code on the user's computer)
+
+The subscription route to the newest models: the current Claude Code runs on the user's
+PC with its own sign-in, and a TermForge tab is its screen.
+
+- `tools/pc-bridge/bridge.mjs` (Node 20+, `node-pty` + `ws`) runs on the PC. It spawns
+  Claude Code (auto-detected, `--claude` to override) or a shell in a real PTY — ConPTY on
+  Windows — and serves it at `WS /pty?cmd=claude|shell&cwd=&cols=&rows=&continue=1`:
+  binary frames are terminal bytes both ways, text frames are JSON (`resize` in; `hello`
+  first and `exit` last out). `GET /info` lists the machine, its Claude Code version and
+  the folders under `--projects`. Every request carries the pairing token
+  (`~/.termforge-bridge/config.json`, `--new-token` rotates it). It prints a
+  `termforge://pair?url=&token=&name=` link, using the Tailscale name when there is one.
+- `App/Model/PCBridge.swift`: `PCBridgeSettings` (address + name in UserDefaults, token in
+  the Keychain, the pair-link parser) and `PCSession`, a `URLSessionWebSocketTask` client
+  with a 20 s ping; `TabKind.pc` in `TerminalSession` feeds SwiftTerm from it. The app
+  registers the `termforge` URL scheme so the link pairs the phone in one tap; Settings has
+  the manual fields, and an unpaired PC tab shows the pair card.
+- Transport: plain `ws://` is fine over Tailscale (already end-to-end encrypted); on an
+  untrusted LAN use `tailscale serve` or any TLS proxy and a `wss://` address.
+
 ## Tests
 
 | suite | runs on | what |

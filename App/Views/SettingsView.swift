@@ -128,9 +128,60 @@ struct APIKeyCard: View {
     }
 }
 
+/// Shown in a PC tab until a bridge is paired; also the body of the Settings section.
+struct PCPairCard: View {
+    @EnvironmentObject private var model: AppModel
+    var compact = true
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if compact {
+                Text("Pair your computer").font(.headline)
+                Text("Run `tools/pc-bridge` (node bridge.mjs) on the PC that has Claude Code signed in. It prints an address and a pairing link: open the link on this phone, or paste the two values here. Claude Code then runs on the PC — current version, your subscription, every model — and this tab is its screen (over Tailscale or your LAN).")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            PCPairFields()
+        }
+        .padding(compact ? 16 : 0)
+        .frame(maxWidth: compact ? 520 : .infinity)
+        .background(compact ? AnyShapeStyle(.regularMaterial) : AnyShapeStyle(.clear), in: RoundedRectangle(cornerRadius: 14))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("pc.pair.card")
+    }
+}
+
+struct PCPairFields: View {
+    @EnvironmentObject private var model: AppModel
+    @State private var address = PCBridgeSettings.url ?? ""
+    @State private var token = ""
+
+    var body: some View {
+        TextField("ws://your-pc.tailnet.ts.net:7788", text: $address)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .keyboardType(.URL)
+            .textFieldStyle(.roundedBorder)
+            .accessibilityIdentifier("pc.address")
+        SecureField("pairing token", text: $token)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .textFieldStyle(.roundedBorder)
+            .accessibilityIdentifier("pc.token")
+        Button("Pair") {
+            model.pairPC(url: address, token: token, name: URL(string: address)?.host)
+            token = ""
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(address.trimmingCharacters(in: .whitespaces).isEmpty || token.trimmingCharacters(in: .whitespaces).isEmpty)
+        .accessibilityIdentifier("pc.pair.button")
+    }
+}
+
 struct SettingsView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
+    @AppStorage(PCBridgeSettings.cwdKey) private var pcCwd = ""
     @AppStorage(AgentSettings.modelKey) private var agentModel = AgentSettings.defaultModel
     @AppStorage(AgentSettings.effortKey) private var agentEffort = AgentSettings.defaultEffort
     @State private var apiKey = ""
@@ -194,6 +245,23 @@ struct SettingsView: View {
                     }
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
+                }
+
+                Section {
+                    if model.pcPaired {
+                        LabeledContent("Address", value: PCBridgeSettings.url ?? "")
+                        if let name = PCBridgeSettings.name { LabeledContent("Computer", value: name) }
+                        TextField("working folder on the PC (optional)", text: $pcCwd)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                        Button("Unpair", role: .destructive) { model.unpairPC() }
+                    } else {
+                        PCPairFields()
+                    }
+                } header: {
+                    Text("PC bridge")
+                } footer: {
+                    Text("Runs the current Claude Code on your computer with its own sign-in and shows it in a \"Claude Code on PC\" tab. Start tools/pc-bridge on the PC; it prints the address and a termforge://pair link.")
                 }
 
                 Section("Linux layer") {

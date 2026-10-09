@@ -38,6 +38,21 @@ jobs:
             ${{ runner.temp }}/vendor-report.md
           if-no-files-found: ignore
 
+  bridge:
+    name: PC bridge (Node 22)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: tools/pc-bridge
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --no-audit --no-fund
+      - run: node --test test/bridge.test.mjs
+
   ios:
     name: iOS build + tests (simulator)
     runs-on: macos-15
@@ -81,14 +96,23 @@ jobs:
           print(best[1]); print(best[2], best[0], file=sys.stderr)
           ')
           echo "SIM=$UDID" >> "$GITHUB_ENV"
+      - name: PC bridge on the runner (the simulator's PC tab test connects to it)
+        working-directory: tools/pc-bridge
+        run: |
+          npm ci --no-audit --no-fund
+          nohup node bridge.mjs --host 127.0.0.1 --port 7788 --shell /bin/bash --claude /bin/bash > "$RUNNER_TEMP/bridge.log" 2>&1 &
+          sleep 4
+          cat "$RUNNER_TEMP/bridge.log"
+          echo "PC_BRIDGE_TOKEN=$(python3 -c 'import json,os;print(json.load(open(os.path.expanduser("~/.termforge-bridge/config.json")))["token"])')" >> "$GITHUB_ENV"
       - name: Test (unit + UI)
         run: |
           set -o pipefail
+          TEST_RUNNER_PC_BRIDGE_URL=ws://127.0.0.1:7788 TEST_RUNNER_PC_BRIDGE_TOKEN="$PC_BRIDGE_TOKEN" \
           xcodebuild test -project TermForge.xcodeproj -scheme TermForge \
             -destination "platform=iOS Simulator,id=$SIM" \
             -resultBundlePath "$RUNNER_TEMP/TermForge.xcresult" \
             -skipPackagePluginValidation -skipMacroValidation \
-            2>&1 | tee "$RUNNER_TEMP/test.log" | grep -E --line-buffered '^(Test (Case|Suite)|METRIC|CLAUDE\||EXEC\||LINUX\||UISCREEN\||BRIDGE\||.*error:|\*\* TEST)' || true
+            2>&1 | tee "$RUNNER_TEMP/test.log" | grep -E --line-buffered '^(Test (Case|Suite)|METRIC|CLAUDE\||EXEC\||LINUX\||UISCREEN\||BRIDGE\||AGENT\||PC\||.*error:|\*\* TEST)' || true
           grep -q '\*\* TEST SUCCEEDED \*\*' "$RUNNER_TEMP/test.log"
       - name: Crash reports (simulator processes that died during the tests)
         if: always()

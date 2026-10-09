@@ -10,6 +10,7 @@ struct TermForgeApp: App {
             ContentView()
                 .environmentObject(model)
                 .onAppear { model.start() }
+                .onOpenURL { url in model.handle(url: url) }
                 .preferredColorScheme(.dark)
         }
         .onChange(of: scenePhase) { _, phase in

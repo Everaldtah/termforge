@@ -65,6 +65,7 @@ struct SessionView: View {
                         switch session.kind {
                         case .linux: LinuxInstallCard().padding()
                         case .node(.agent): APIKeyCard().padding()
+                        case .pc: PCPairCard().padding()
                         default: InstallCard().padding()
                         }
                     } else {
@@ -72,7 +73,7 @@ struct SessionView: View {
                     }
                 }
             }
-            if session.kind.isClaude && session.running {
+            if (session.kind.isClaude || session.kind == .pc) && session.running {
                 ClaudeQuickActions(session: session)
             }
             if session.kind == .node(.agent) && session.running {

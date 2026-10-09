@@ -31,6 +31,12 @@ struct TabStrip: View {
                 }
                 .accessibilityIdentifier("new.agent")
                 Button {
+                    model.newSession(kind: .pc)
+                } label: {
+                    Label("Claude Code on PC", systemImage: "desktopcomputer")
+                }
+                .accessibilityIdentifier("new.pc")
+                Button {
                     model.newSession(kind: .linux)
                 } label: {
                     Label("Linux shell (Alpine)", systemImage: "terminal")

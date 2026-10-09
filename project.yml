@@ -59,6 +59,9 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
+        CFBundleURLTypes:
+          - CFBundleURLName: com.everaldtah.termforge.pair
+            CFBundleURLSchemes: [termforge]
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         UISupportedInterfaceOrientations:

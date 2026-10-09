@@ -12,7 +12,9 @@ worker thread behind a virtual TTY rendered by SwiftTerm.
 > On a real iPhone via TestFlight: Claude Code signs in and answers prompts (build 5).
 > Because the API refuses the newest models to Claude Code 2.1.112, an **Agent tab** —
 > TermForge's own Messages API chat with file tools and `bash` in the Linux layer, on the
-> user's API key — gives access to Claude Opus 5.5, Fable 5.1 and the rest. Not yet done:
+> user's API key — gives access to Claude Opus 5.5, Fable 5.1 and the rest; and a **PC tab**
+> shows the current Claude Code running on your own computer (`tools/pc-bridge`, over
+> Tailscale or LAN) with its subscription sign-in. Not yet done:
 > phase 4 (distro manager, Files provider), the FastPath engine. Read
 > [docs/LIMITATIONS.md](docs/LIMITATIONS.md): Claude Code is pinned to 2.1.112 (the last
 > JavaScript release), Anthropic's hosting terms apply, and TermForge is GPL-3.0 because it
@@ -49,6 +51,7 @@ node run-session.mjs --home /tmp/tf-home --install claude-code --kind claude --u
 | `tools/ish/` | the C shim over iSH's kernel, its Linux test harness, the iOS cross-build script |
 | `nodejs-project/` | runs inside Node: supervisor, virtual TTY, child_process shim, installer, pins |
 | `nodejs-project/agent/` | the Agent tab: TermForge's own Messages API chat with file tools and `bash` in the Linux layer (API key; Opus 5.5, Fable 5.1, …) |
+| `tools/pc-bridge/` | the PC tab's other half: runs the current Claude Code on your computer in a PTY and serves it to the phone over a WebSocket (subscription, every model) |
 | `nodejs-tests/`, `Tests/` | Node tests, iOS unit + UI tests |
 | `tools/desktop-harness` | desktop stand-in for the app: boots the supervisor, renders a tab in a headless xterm |
 | `scripts/` | bootstrap, framework fetches, Alpine rootfs builder, Claude Code vendoring report, App Store checks |

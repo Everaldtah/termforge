@@ -121,6 +121,9 @@ From code.claude.com/docs/en/legal-and-compliance, 2026-10-08:
   through it, so the route is real, but ~2 minutes per prompt is not a terminal anyone
   would use; seeds termforge-81ba keeps the notes. User-mode emulators (Blink, QEMU-user)
   are out because they need the host's `fork`, which iOS does not have.
+- What ships instead for "subscription + newest models": the **PC tab** — Claude Code runs
+  on the user's own computer through `tools/pc-bridge` and the phone is its terminal. It
+  needs that computer on and reachable (Tailscale or the same LAN).
 
 ## iOS process model
 

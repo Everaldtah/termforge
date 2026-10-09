@@ -7,17 +7,20 @@ import TerminalUI
 enum TabKind: Codable, Equatable {
     case node(SessionKind)
     case linux
+    /// Claude Code running on the user's computer, reached through the PC bridge.
+    case pc
 
     var isClaude: Bool { self == .node(.claude) }
     var saveName: String {
         switch self {
         case .node(let k): return k.rawValue
         case .linux: return "linux"
+        case .pc: return "pc"
         }
     }
 
     init(saveName: String) {
-        if let k = SessionKind(rawValue: saveName) { self = .node(k) } else { self = .linux }
+        if let k = SessionKind(rawValue: saveName) { self = .node(k) } else if saveName == "pc" { self = .pc } else { self = .linux }
     }
 }
 
@@ -37,6 +40,7 @@ final class TerminalSession: ObservableObject, Identifiable {
 
     private(set) var node: NodeSession?
     private(set) var linux: LinuxSession?
+    private(set) var pc: PCSession?
     private var resumeOnStart: Bool
     private var snapshotTimer: Timer?
 
@@ -51,11 +55,13 @@ final class TerminalSession: ObservableObject, Identifiable {
         case .node(.repl): title = "Node"
         case .node(.script): title = "Script"
         case .linux: title = "Alpine"
+        case .pc: title = "PC · \(PCBridgeSettings.name ?? "Claude Code")"
         }
         controller.onInput = { [weak self] bytes in self?.write(bytes) }
         controller.onResize = { [weak self] cols, rows in
             self?.node?.resize(cols: cols, rows: rows)
             self?.linux?.resize(cols: cols, rows: rows)
+            self?.pc?.resize(cols: cols, rows: rows)
         }
         controller.onOpenLink = { url in WebAuth.shared.open(url) }
     }
@@ -65,6 +71,33 @@ final class TerminalSession: ObservableObject, Identifiable {
         switch kind {
         case .node(let sessionKind): startNode(sessionKind, apiKey: apiKey)
         case .linux: startLinux()
+        case .pc: startPC()
+        }
+    }
+
+    /// Claude Code on the paired computer, through the PC bridge's WebSocket PTY.
+    private func startPC() {
+        let resume = resumeOnStart
+        resumeOnStart = false
+        guard let url = PCBridgeSettings.url, let token = PCBridgeSettings.token else {
+            finished(SessionExit(code: nil, error: "no PC bridge paired", reason: "NOT_INSTALLED", ms: nil))
+            return
+        }
+        do {
+            let session = try PCSession(baseURL: url, token: token, cmd: "claude", cwd: PCBridgeSettings.cwd,
+                                        cols: controller.cols, rows: controller.rows, continueSession: resume)
+            self.pc = session
+            exit = nil
+            running = true
+            session.onData = { [weak self] data in
+                DispatchQueue.main.async { MainActor.assumeIsolated { self?.controller.feed(Array(data)[...]) } }
+            }
+            session.onExit = { [weak self] code, error in
+                DispatchQueue.main.async { MainActor.assumeIsolated { self?.finished(SessionExit(code: code, error: error, reason: nil, ms: nil)) } }
+            }
+            session.connect()
+        } catch {
+            finished(SessionExit(code: nil, error: error.localizedDescription, reason: "OPEN_FAILED", ms: nil))
         }
     }
 
@@ -138,7 +171,7 @@ final class TerminalSession: ObservableObject, Identifiable {
     }
 
     private func write(_ bytes: [UInt8]) {
-        if let node { node.write(bytes) } else { linux?.write(Data(bytes)) }
+        if let node { node.write(bytes) } else if let pc { pc.write(Data(bytes)) } else { linux?.write(Data(bytes)) }
     }
 
     private func finished(_ info: SessionExit) {
@@ -146,6 +179,7 @@ final class TerminalSession: ObservableObject, Identifiable {
         exit = info
         node = nil
         linux = nil
+        pc = nil
         if info.notInstalled { return }
         var line = "\r\n\u{1b}[2m[process exited"
         if let code = info.code { line += " with code \(code)" }
@@ -157,6 +191,7 @@ final class TerminalSession: ObservableObject, Identifiable {
     func restart(apiKey: String?) {
         node = nil
         linux = nil
+        pc = nil
         start(apiKey: apiKey)
     }
 
@@ -164,6 +199,7 @@ final class TerminalSession: ObservableObject, Identifiable {
         snapshotTimer?.invalidate()
         node?.close()
         linux?.hangup()
+        pc?.close()
     }
 
     // MARK: quick actions
