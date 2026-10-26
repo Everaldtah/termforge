@@ -17,7 +17,9 @@ final class AppModel: ObservableObject {
     @Published private(set) var hasAPIKey = Keychain.get(Keychain.anthropicAPIKey) != nil
     @Published var showSettings = false
 
-    let uiTestMode = ProcessInfo.processInfo.arguments.contains("-UITestMode")
+    let uiTestMode = ProcessInfo.processInfo.arguments.contains("-UITestMode") || ProcessInfo.processInfo.arguments.contains("-ScreenshotMode")
+    /// -ScreenshotMode (screenshots.yml): UI-test mode with nothing test-only drawn on screen.
+    let screenshotMode = ProcessInfo.processInfo.arguments.contains("-ScreenshotMode")
     let runtime = NodeRuntime.shared
     let linux = LinuxLayer()
     private var restored = false

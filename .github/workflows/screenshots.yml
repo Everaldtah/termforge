@@ -1,0 +1,156 @@
+# App Store screenshots from the real app in the iOS simulator: Tests/TermForgeUITests/
+# ScreenshotTests drives a Linux shell session, Claude Code's install card and first-run
+# screen, and Settings, on a 6.9-inch iPhone (1320x2868) and a 13-inch iPad (2064x2752).
+# The PNGs (RGB, no alpha) are uploaded as the "appstore-screenshots" artifact.
+name: Screenshots
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: screenshots
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    name: App Store screenshots (simulator)
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Xcode 26
+        run: |
+          X=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$X" ]; then echo "no Xcode 26 on this image"; ls /Applications | grep -i xcode; exit 1; fi
+          sudo xcode-select -s "$X/Contents/Developer"
+          xcodebuild -version
+      - name: Tools
+        run: brew install xcodegen
+      - name: Cache vendored frameworks
+        uses: actions/cache@v4
+        with:
+          path: |
+            Packages/NodeCore/Vendor
+            Packages/LinuxCore/Vendor
+          key: vendor-${{ hashFiles('scripts/fetch-nodejs-mobile.sh', 'scripts/fetch-ish.sh') }}
+      - name: Generate project
+        run: |
+          chmod +x scripts/*.sh
+          scripts/fetch-nodejs-mobile.sh
+          scripts/fetch-ish.sh
+          xcodegen generate
+      - name: Simulators (newest iOS runtime; 6.9-inch iPhone, 13-inch iPad)
+        run: |
+          python3 - >> "$GITHUB_ENV" <<'PY'
+          import json, re, subprocess, sys
+          def sh(*args):
+              return subprocess.check_output(args, text=True)
+          runtimes = [r for r in json.loads(sh("xcrun", "simctl", "list", "-j", "runtimes", "available"))["runtimes"]
+                      if r.get("platform") == "iOS" or ".SimRuntime.iOS-" in r["identifier"]]
+          runtimes.sort(key=lambda r: [int(x) for x in r["version"].split(".")])
+          rt = runtimes[-1]
+          types = rt.get("supportedDeviceTypes") or json.loads(sh("xcrun", "simctl", "list", "-j", "devicetypes"))["devicetypes"]
+          for var, pattern in (("IPHONE", r"iPhone (\d+) Pro Max"), ("IPAD", r"iPad Pro 13-inch \(M(\d+)\)")):
+              found = [(int(m.group(1)), t) for t in types if (m := re.fullmatch(pattern, t["name"]))]
+              if not found:
+                  sys.exit(f"no device type matches {pattern} on {rt['name']}: {[t['name'] for t in types]}")
+              t = max(found, key=lambda f: f[0])[1]
+              udid = sh("xcrun", "simctl", "create", f"Screenshots {t['name']}", t["identifier"], rt["identifier"]).strip()
+              print(f"{var}={udid}")
+              print(f"created {t['name']} on {rt['name']}: {udid}", file=sys.stderr)
+          PY
+          # the software keyboard, not the Mac's, so the terminal's extra-keys row shows above it
+          defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false
+      - name: Build for testing
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing -project TermForge.xcodeproj -scheme TermForge \
+            -destination "platform=iOS Simulator,id=$IPHONE" -derivedDataPath "$RUNNER_TEMP/dd" \
+            -skipPackagePluginValidation -skipMacroValidation \
+            2>&1 | tee "$RUNNER_TEMP/build.log" | grep -E --line-buffered '(error:|\*\* )' || true
+          grep -q '\*\* TEST BUILD SUCCEEDED \*\*' "$RUNNER_TEMP/build.log"
+      - name: iPhone 6.9-inch
+        run: |
+          set -o pipefail
+          OUT="$RUNNER_TEMP/shots/iphone69"; mkdir -p "$OUT"
+          xcrun simctl boot "$IPHONE"; xcrun simctl bootstatus "$IPHONE" -b
+          xcrun simctl spawn "$IPHONE" defaults write com.apple.keyboard.preferences DidShowContinuousPathIntroduction -bool true
+          xcrun simctl status_bar "$IPHONE" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
+          TEST_RUNNER_SCREENSHOT_DIR="$OUT" xcodebuild test-without-building -project TermForge.xcodeproj -scheme TermForge \
+            -destination "platform=iOS Simulator,id=$IPHONE" -derivedDataPath "$RUNNER_TEMP/dd" \
+            -only-testing:TermForgeUITests/ScreenshotTests -resultBundlePath "$RUNNER_TEMP/iphone69.xcresult" \
+            2>&1 | tee "$RUNNER_TEMP/iphone69.log" | grep -E --line-buffered '^(Test (Case|Suite)|SHOT\||.*error:|\*\* TEST)' || true
+          xcrun simctl shutdown "$IPHONE" || true
+          grep -qE '\*\* TEST (EXECUTE )?SUCCEEDED \*\*' "$RUNNER_TEMP/iphone69.log"
+      - name: iPad 13-inch
+        if: success() || failure()
+        run: |
+          set -o pipefail
+          OUT="$RUNNER_TEMP/shots/ipad13"; mkdir -p "$OUT"
+          xcrun simctl boot "$IPAD"; xcrun simctl bootstatus "$IPAD" -b
+          xcrun simctl spawn "$IPAD" defaults write com.apple.keyboard.preferences DidShowContinuousPathIntroduction -bool true
+          xcrun simctl status_bar "$IPAD" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
+          TEST_RUNNER_SCREENSHOT_DIR="$OUT" xcodebuild test-without-building -project TermForge.xcodeproj -scheme TermForge \
+            -destination "platform=iOS Simulator,id=$IPAD" -derivedDataPath "$RUNNER_TEMP/dd" \
+            -only-testing:TermForgeUITests/ScreenshotTests -resultBundlePath "$RUNNER_TEMP/ipad13.xcresult" \
+            2>&1 | tee "$RUNNER_TEMP/ipad13.log" | grep -E --line-buffered '^(Test (Case|Suite)|SHOT\||.*error:|\*\* TEST)' || true
+          xcrun simctl shutdown "$IPAD" || true
+          grep -qE '\*\* TEST (EXECUTE )?SUCCEEDED \*\*' "$RUNNER_TEMP/ipad13.log"
+      - name: Check sizes, drop alpha (App Store rejects it)
+        if: success() || failure()
+        run: |
+          python3 -m pip install -q --break-system-packages pillow
+          python3 - "$RUNNER_TEMP" <<'PY'
+          import json, os, pathlib, shutil, subprocess, sys
+          from PIL import Image
+          temp = pathlib.Path(sys.argv[1])
+          want = {"iphone69": (1320, 2868), "ipad13": (2064, 2752)}
+          bad = []
+          summary = ["### App Store screenshots", "", "| file | size | mode |", "|---|---|---|"]
+          for device, size in want.items():
+              out = temp / "shots" / device
+              out.mkdir(parents=True, exist_ok=True)
+              bundle = temp / f"{device}.xcresult"
+              if not any(out.glob("*.png")) and bundle.exists():
+                  # the runner could not write to the host: take the result bundle's attachments
+                  dump = temp / f"{device}-attachments"
+                  subprocess.run(["xcrun", "xcresulttool", "export", "attachments", "--path", str(bundle), "--output-path", str(dump)], check=False)
+                  manifest = dump / "manifest.json"
+                  for test in json.loads(manifest.read_text()) if manifest.exists() else []:
+                      for a in test.get("attachments", []):
+                          name = a.get("suggestedHumanReadableName", "")
+                          stem = name.split("_")[0]
+                          if stem[:2].isdigit() and name.endswith(".png"):
+                              shutil.copy(dump / a["exportedFileName"], out / f"{stem}.png")
+              files = sorted(out.glob("*.png"))
+              if not files:
+                  bad.append(f"{device}: no screenshots")
+              for f in files:
+                  im = Image.open(f)
+                  if im.mode != "RGB":
+                      im.convert("RGB").save(f, optimize=True)
+                      im = Image.open(f)
+                  ok = im.size == size
+                  if not ok:
+                      bad.append(f"{device}/{f.name}: {im.size[0]}x{im.size[1]}, want {size[0]}x{size[1]}")
+                  summary.append(f"| {device}/{f.name} | {im.size[0]}x{im.size[1]}{'' if ok else ' (WRONG)'} | {im.mode} |")
+          print("\n".join(summary))
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as s:
+              s.write("\n".join(summary) + "\n")
+          if bad:
+              sys.exit("\n".join(bad))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: success() || failure()
+        with:
+          name: appstore-screenshots
+          path: ${{ runner.temp }}/shots
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        if: success() || failure()
+        with:
+          name: screenshot-results
+          path: |
+            ${{ runner.temp }}/*.xcresult
+            ${{ runner.temp }}/*.log
+          if-no-files-found: ignore

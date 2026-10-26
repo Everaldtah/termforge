@@ -79,8 +79,14 @@ struct SessionView: View {
             if session.kind == .node(.agent) && session.running {
                 AgentQuickActions(session: session)
             }
-            if model.uiTestMode {
+            if model.uiTestMode && !model.screenshotMode {
                 UITestProbe(session: session)
+            }
+        }
+        .background(alignment: .bottomLeading) {
+            // screenshots: the test types on the real keyboard; the screen text stays readable, undrawn
+            if model.screenshotMode {
+                UITestScreenText(session: session).foregroundStyle(.clear).frame(width: 4, height: 4).clipped()
             }
         }
     }
@@ -174,11 +180,20 @@ struct UITestProbe: View {
                     input = ""
                 }
                 .accessibilityIdentifier("uitest.input")
-            Text(session.screenSnapshot)
-                .font(.system(size: 2))
-                .frame(height: 4)
-                .accessibilityIdentifier("uitest.screen")
-                .accessibilityLabel(session.screenSnapshot)
+            UITestScreenText(session: session)
         }
+    }
+}
+
+/// The visible screen as an accessibility label (uitest.screen) for XCUITest.
+struct UITestScreenText: View {
+    @ObservedObject var session: TerminalSession
+
+    var body: some View {
+        Text(session.screenSnapshot)
+            .font(.system(size: 2))
+            .frame(height: 4)
+            .accessibilityIdentifier("uitest.screen")
+            .accessibilityLabel(session.screenSnapshot)
     }
 }
