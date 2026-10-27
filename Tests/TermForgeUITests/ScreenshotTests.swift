@@ -41,6 +41,11 @@ final class ScreenshotTests: XCTestCase {
         }
         waitForScreen(containing: "#", timeout: 600)
         pause(1)
+        // A blinking caret is an endless animation, so XCTest waits 60 s for idle around every
+        // keystroke batch; DECSCUSR 2 (steady block) stops it. clear leaves an empty screen.
+        type("printf '\\e[2 q'; clear\n")
+        let cleared = Date().addingTimeInterval(60)
+        while screenText().contains("printf") && Date() < cleared { pause(0.25) }
         shell("uname -a", until: "Linux")
         shell("cat /etc/os-release", until: "VERSION_ID")
         shell("git --version", until: "git version")
@@ -98,12 +103,14 @@ final class ScreenshotTests: XCTestCase {
             drag(form, by: 0.35)
         }
         if measure.exists && measure.isHittable {
-            if measure.frame.maxY > app.windows.firstMatch.frame.height * 0.8 { drag(form, by: 0.2) }
             measure.tap()
             _ = app.staticTexts["Round trip (median of 20)"].waitForExistence(timeout: 15)
         } else {
             print("SHOT| settings: the Runtime section never became visible")
         }
+        // the end of the list, so the measured round trip is the last row and fully visible
+        drag(form, by: 0.35)
+        drag(form, by: 0.35)
         pause(1)
         capture("05-settings")
     }
