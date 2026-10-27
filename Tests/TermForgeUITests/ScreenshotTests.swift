@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 
 /// App Store screenshots, run by .github/workflows/screenshots.yml on a 6.9-inch iPhone and a
@@ -17,6 +18,7 @@ final class ScreenshotTests: XCTestCase {
         try? FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
         continueAfterFailure = false
         XCUIDevice.shared.orientation = .portrait
+        if UIDevice.current.userInterfaceIdiom == .pad { useFullScreenApps() }
         app = XCUIApplication()
         app.launchArguments = ["-ScreenshotMode"]
         app.launch()
@@ -113,6 +115,32 @@ final class ScreenshotTests: XCTestCase {
         drag(form, by: 0.35)
         pause(1)
         capture("05-settings")
+    }
+
+    /// iPadOS 26 starts in Windowed Apps mode, which draws a resize grabber in the corner of
+    /// every app; App Store shots want Settings > Multitasking & Gestures > Full Screen Apps.
+    private func useFullScreenApps() {
+        let settings = XCUIApplication(bundleIdentifier: "com.apple.Preferences")
+        settings.launch()
+        defer { settings.terminate() }
+        let row = settings.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS[c] 'Multitasking'")).firstMatch
+        guard row.waitForExistence(timeout: 20) else {
+            print("SHOT| Settings: no Multitasking & Gestures row\n\(settings.debugDescription.prefix(6000))")
+            return
+        }
+        for _ in 0..<4 where !row.isHittable {
+            settings.collectionViews.firstMatch.swipeUp()
+        }
+        row.tap()
+        let choice = settings.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS[c] 'full screen' OR label CONTAINS[c] 'full-screen'")).firstMatch
+        guard choice.waitForExistence(timeout: 15) else {
+            print("SHOT| Settings: no Full Screen Apps choice\n\(settings.debugDescription.prefix(6000))")
+            return
+        }
+        choice.tap()
+        pause(2)
+        print("SHOT| Settings: Full Screen Apps tapped (\(choice.elementType.rawValue) \"\(choice.label)\", selected: \(choice.isSelected))")
     }
 
     // MARK: driving the app
