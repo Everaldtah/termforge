@@ -89,14 +89,14 @@ jobs:
           OUT="$RUNNER_TEMP/shots/ipad13"; mkdir -p "$OUT"
           xcrun simctl boot "$IPAD"; xcrun simctl bootstatus "$IPAD" -b
           # diagnostic: the multitasking mode iPadOS 26 keeps (Windowed Apps draws a resize grabber)
-          { echo "--- springboard defaults"; xcrun simctl spawn "$IPAD" defaults read com.apple.springboard 2>&1 | head -60
+          { echo "--- springboard windowing defaults"
+            xcrun simctl spawn "$IPAD" defaults read com.apple.springboard 2>&1 | grep -iE 'chamois|windowing|multitask|fullscreen|windowed|stage' || true
             ROOT=$(xcrun simctl list -j runtimes available | python3 -c 'import json,sys; r=[x for x in json.load(sys.stdin)["runtimes"] if x.get("platform")=="iOS"]; r.sort(key=lambda x:[int(v) for v in x["version"].split(".")]); print(r[-1]["runtimeRoot"])')
-            echo "--- SpringBoard strings in $ROOT"
-            for f in "$ROOT"/System/Library/CoreServices/SpringBoard.app/SpringBoard "$ROOT"/System/Library/PrivateFrameworks/SpringBoard*.framework/SpringBoard*; do
-              [ -f "$f" ] && strings "$f" | grep -E '^SB[A-Za-z]*(Chamois|Windowing|FullScreen|Multitask|Windowed)[A-Za-z]*$'
-            done | sort -u | head -60
-            echo "--- settings bundles naming Windowed Apps"
-            grep -rl --include='*.plist' --include='*.strings' --include='*.loctable' -e 'Windowed Apps' -e 'Full Screen Apps' "$ROOT/System/Library/PreferenceBundles" "$ROOT/Applications/Preferences.app" 2>/dev/null | head -20
+            for b in "$ROOT"/System/Library/PreferenceBundles/Multitask*.bundle; do
+              echo "--- $(basename "$b")"; ls "$b" | head -40
+              find "$b" -maxdepth 2 -name '*.plist' ! -name 'Info.plist' -exec plutil -p {} \; 2>/dev/null | grep -iE '"(key|defaults|id|PostNotification|cell)"|windowed|fullscreen|chamois|stage' | sort -u | head -60
+              BIN="$b/$(basename "$b" .bundle)"; [ -f "$BIN" ] && strings "$BIN" | grep -iE 'windowing|chamois|fullscreen|multitask|windowed' | sort -u | head -60
+            done
           } || true
           xcrun simctl spawn "$IPAD" defaults write com.apple.keyboard.preferences DidShowContinuousPathIntroduction -bool true
           xcrun simctl status_bar "$IPAD" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
