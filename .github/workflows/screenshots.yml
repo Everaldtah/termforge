@@ -88,6 +88,16 @@ jobs:
           set -o pipefail
           OUT="$RUNNER_TEMP/shots/ipad13"; mkdir -p "$OUT"
           xcrun simctl boot "$IPAD"; xcrun simctl bootstatus "$IPAD" -b
+          # diagnostic: the multitasking mode iPadOS 26 keeps (Windowed Apps draws a resize grabber)
+          { echo "--- springboard defaults"; xcrun simctl spawn "$IPAD" defaults read com.apple.springboard 2>&1 | head -60
+            ROOT=$(xcrun simctl list -j runtimes available | python3 -c 'import json,sys; r=[x for x in json.load(sys.stdin)["runtimes"] if x.get("platform")=="iOS"]; r.sort(key=lambda x:[int(v) for v in x["version"].split(".")]); print(r[-1]["runtimeRoot"])')
+            echo "--- SpringBoard strings in $ROOT"
+            for f in "$ROOT"/System/Library/CoreServices/SpringBoard.app/SpringBoard "$ROOT"/System/Library/PrivateFrameworks/SpringBoard*.framework/SpringBoard*; do
+              [ -f "$f" ] && strings "$f" | grep -E '^SB[A-Za-z]*(Chamois|Windowing|FullScreen|Multitask|Windowed)[A-Za-z]*$'
+            done | sort -u | head -60
+            echo "--- settings bundles naming Windowed Apps"
+            grep -rl --include='*.plist' --include='*.strings' --include='*.loctable' -e 'Windowed Apps' -e 'Full Screen Apps' "$ROOT/System/Library/PreferenceBundles" "$ROOT/Applications/Preferences.app" 2>/dev/null | head -20
+          } || true
           xcrun simctl spawn "$IPAD" defaults write com.apple.keyboard.preferences DidShowContinuousPathIntroduction -bool true
           xcrun simctl status_bar "$IPAD" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
           TEST_RUNNER_SCREENSHOT_DIR="$OUT" xcodebuild test-without-building -project TermForge.xcodeproj -scheme TermForge \
